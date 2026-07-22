@@ -25,6 +25,12 @@ io.on('connection', (socket) => {
     console.log('📢 更新公車資訊:', data);
     io.emit('bus-info-updated', data); // 廣播最新站名給跑馬燈
   });
+  // 在伺服器端接收並廣播站點更新
+socket.on('update-stations', (newStations) => {
+  // 將最新站點廣播給所有連線的裝置（跑馬燈、乘客端）
+  socket.broadcast.emit('stations-updated', newStations);
+});
+
 
   socket.on('disconnect', () => {
     console.log('有裝置離線了');
