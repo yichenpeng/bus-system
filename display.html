@@ -1,1 +1,53 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <title>公車跑馬燈顯示端</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <h1>🚌 公車動態資訊系統</h1>
+    
+    <div style="font-size: 1.5rem; margin-top: 20px;">
+        下一站：<span id="next-stop" style="color: #ffcc00; font-size: 2rem;">載入中...</span>
+    </div>
+
+    <!-- 下車鈴提示燈 -->
+    <div id="bell-status" class="bell-alert">🔔 嗶！下車請按鈴</div>
+
+    <!-- 跑馬燈時事宣導 -->
+    <div class="marquee-container">
+        <marquee id="marquee-text">歡迎搭乘本班公車，請隨時注意自身安全，祝您旅途愉快！</marquee>
+    </div>
+
+    <!-- 引入 Socket.io 網址 (說明見下方) -->
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socket = io();
+
+        const nextStopEl = document.getElementById('next-stop');
+        const bellStatusEl = document.getElementById('bell-status');
+        const marqueeTextEl = document.getElementById('marquee-text');
+
+        // 接收伺服器傳來的公車資訊更新
+        socket.on('bus-info-updated', (data) => {
+            if (data.nextStop) nextStopEl.innerText = data.nextStop;
+            if (data.marquee) marqueeTextEl.innerText = data.marquee;
+        });
+
+        // 接收下車鈴信號
+        socket.on('bell-ring', () => {
+            bellStatusEl.classList.add('active');
+            
+            // 播放簡單的逼逼聲 (使用瀏覽器內建語音或視覺提示)
+            if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+
+            // 5秒後自動消滅按鈴燈號
+            setTimeout(() => {
+                bellStatusEl.classList.remove('active');
+            }, 5000);
+        });
+    </script>
+</body>
+</html>
 
