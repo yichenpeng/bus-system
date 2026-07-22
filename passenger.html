@@ -1,1 +1,40 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>乘客下車鈴</title>
+    <style>
+        body { background: #1a1a1a; color: white; text-align: center; padding-top: 60px; font-family: sans-serif; }
+        #bell-btn {
+            width: 260px; height: 260px; border-radius: 50%;
+            background: linear-gradient(145deg, #ff4d4d, #cc0000);
+            color: white; font-size: 2.2rem; font-weight: bold;
+            border: 8px solid #ff9999; box-shadow: 0 10px 30px rgba(255,0,0,0.5);
+            cursor: pointer; outline: none;
+        }
+        #bell-btn:active { transform: scale(0.95); background: #b30000; }
+        #msg { margin-top: 25px; font-size: 1.2rem; color: #00ff66; }
+    </style>
+</head>
+<body>
+    <h1>乘客互動專區</h1>
+    <p>準備下車了嗎？請按下方的按鈕</p>
+    <br>
+    <button id="bell-btn" onclick="ringBell()">我要下車<br>🔔 按鈴</button>
+    <div id="msg"></div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socket = io();
+        const msgEl = document.getElementById('msg');
+
+        function ringBell() {
+            socket.emit('press-bell');
+            msgEl.innerText = "✅ 已成功送出下車鈴！";
+            setTimeout(() => { msgEl.innerText = ""; }, 3000);
+        }
+    </script>
+</body>
+</html>
 
