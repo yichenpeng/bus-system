@@ -1,1 +1,36 @@
+body {
+    background-color: #111;
+    color: #fff;
+    font-family: Arial, sans-serif;
+    text-align: center;
+    margin: 0;
+    padding: 20px;
+}
+.marquee-container {
+    background: #000;
+    border: 4px solid #444;
+    padding: 20px;
+    margin: 20px auto;
+    width: 80%;
+    font-size: 2.5rem;
+    color: #00ff66;
+    font-weight: bold;
+    overflow: hidden;
+    white-space: nowrap;
+}
+.bell-alert {
+    font-size: 3rem;
+    color: #ff3b30;
+    font-weight: bold;
+    margin: 20px;
+    visibility: hidden; /* 預設隱藏，按鈴時顯示 */
+}
+.bell-alert.active {
+    visibility: visible;
+    animation: blink 0.5s infinite alternate;
+}
+@keyframes blink {
+    from { opacity: 1; }
+    to { opacity: 0.2; }
+}
 
