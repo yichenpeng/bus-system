@@ -1,53 +1,76 @@
 <!DOCTYPE html>
-<html lang="zh-Hant">
+<html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <title>公車跑馬燈顯示端</title>
-    <link rel="stylesheet" href="style.css">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>公車 LED 跑馬燈 - 顯示幕</title>
+    <style>
+        body { 
+            background-color: #000; 
+            color: #ff3300; 
+            font-family: 'Courier New', Courier, monospace; 
+            margin: 0; 
+            padding: 40px; 
+            display: flex; 
+            flex-direction: column; 
+            justify-content: center; 
+            height: 100vh; 
+            box-sizing: border-box; 
+        }
+        .marquee-container { 
+            background: #110000; 
+            border: 4px solid #440000; 
+            padding: 30px; 
+            border-radius: 10px; 
+            box-shadow: 0 0 20px rgba(255, 51, 0, 0.3); 
+        }
+        h1 { font-size: 28px; color: #ffaa00; margin-top: 0; text-transform: uppercase; border-bottom: 2px dashed #440000; padding-bottom: 10px; }
+        .current-station { font-size: 64px; font-weight: bold; margin: 20px 0; text-shadow: 0 0 10px rgba(255, 51, 0, 0.7); }
+        .next-station { font-size: 24px; color: #aa5500; }
+        .station-list-preview { margin-top: 30px; font-size: 16px; color: #662200; }
+    </style>
 </head>
 <body>
-    <h1>🚌 公車動態資訊系統</h1>
-    
-    <div style="font-size: 1.5rem; margin-top: 20px;">
-        下一站：<span id="next-stop" style="color: #ffcc00; font-size: 2rem;">載入中...</span>
+
+    <div class="container marquee-container">
+        <h1>🚌 本次行駛路線與即時站點</h1>
+        <div class="station-info">
+            <div class="next-station" id="nextStationText">下一站：等待駕駛員同步資料...</div>
+            <div class="current-station" id="currentStationText">---</div>
+        </div>
+        <div class="station-list-preview" id="previewText">完整站點：尚未載入</div>
     </div>
 
-    <!-- 下車鈴提示燈 -->
-    <div id="bell-status" class="bell-alert">🔔 嗶！下車請按鈴</div>
-
-    <!-- 跑馬燈時事宣導 -->
-    <div class="marquee-container">
-        <marquee id="marquee-text">歡迎搭乘本班公車，請隨時注意自身安全，祝您旅途愉快！</marquee>
-    </div>
-
-    <!-- 引入 Socket.io 網址 (說明見下方) -->
+    <!-- 引入 Socket.io -->
     <script src="/socket.io/socket.io.js"></script>
     <script>
         const socket = io();
 
-        const nextStopEl = document.getElementById('next-stop');
-        const bellStatusEl = document.getElementById('bell-status');
-        const marqueeTextEl = document.getElementById('marquee-text');
+        const currentStationText = document.getElementById('currentStationText');
+        const nextStationText = document.getElementById('nextStationText');
+        const previewText = document.getElementById('previewText');
 
-        // 接收伺服器傳來的公車資訊更新
-        socket.on('bus-info-updated', (data) => {
-            if (data.nextStop) nextStopEl.innerText = data.nextStop;
-            if (data.marquee) marqueeTextEl.innerText = data.marquee;
-        });
+        // 接收來自後端的站點更新
+        socket.on('update-stations', (stations) => {
+            if (!stations || stations.length === 0) {目前
+                currentStationText.textContent = '---';
+                nextStationText.textContent = '下一站：無站點資料';
+                previewText.textContent = '完整站點：無';
+                return;
+            }
 
-        // 接收下車鈴信號
-        socket.on('bell-ring', () => {
-            bellStatusEl.classList.add('active');
-            
-            // 播放簡單的逼逼聲 (使用瀏覽器內建語音或視覺提示)
-            if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+            // 暫時預設顯示第一個站點作為示範
+            currentStationText.textContent = `即將到站：${stations[0].name}`;
+            if (stations.length > 1) {
+                nextStationText.textContent = `下一站：${stations[1].name}`;
+            } else {
+                nextStationText.textContent = `已是最後一站`;
+            }
 
-            // 5秒後自動消滅按鈴燈號
-            setTimeout(() => {
-                bellStatusEl.classList.remove('active');
-            }, 5000);
+            // 顯示所有站點的清單預覽
+            const names = stations.map(s => s.name).join(' ➔ ');
+            previewText.textContent = `完整路線：${names}`;
         });
     </script>
 </body>
 </html>
-
