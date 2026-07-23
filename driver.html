@@ -10,24 +10,32 @@
         body { font-family: Arial, sans-serif; margin: 20px; background-color: #f4f4f9; }
         .container { max-width: 600px; margin: auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
         h2 { color: #333; text-align: center; }
-        .input-group, .announcement-group { display: flex; flex-direction: column; gap: 10px; margin-bottom: 15px; background: #fafafa; padding: 15px; border-radius: 6px; border: 1px solid #eee; }
+        .input-group { display: flex; flex-direction: column; gap: 10px; margin-bottom: 15px; background: #fafafa; padding: 15px; border-radius: 6px; border: 1px solid #eee; }
         .input-row { display: flex; gap: 10px; }
         input { flex: 1; padding: 10px; font-size: 16px; border: 1px solid #ccc; border-radius: 4px; }
         button { padding: 10px 15px; font-size: 16px; background-color: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer; }
         button:hover { background-color: #218838; }
-        ul { list-style: none; padding: 0; width: 100%; }
+        ul { list-style: none; padding: 0; }
         
-        li { background: #fff; border: 1px solid #ddd; margin-bottom: 8px; padding: 10px; display: flex; justify-content: space-between; align-items: center; border-radius: 4px; transition: background-color 0.2s; box-sizing: border-box; }
+        /* 一般站點樣式 */
+        li { background: #fff; border: 1px solid #ddd; margin-bottom: 8px; padding: 10px; display: flex; justify-content: space-between; align-items: center; border-radius: 4px; transition: background-color 0.2s; }
         li.active-station { border: 2px solid #007bff; background-color: #e8f4fd; }
 
-        li.sortable-ghost { opacity: 0.3; background: #e2e8f0; }
-        li.sortable-chosen { background: #fff3cd; }
+        /* 🌟 嚴格限制拖拉時的樣式與寬度，防止左右亂跑 */
+        li.sortable-ghost {
+            opacity: 0.3;
+            background: #e2e8f0;
+        }
+        li.sortable-chosen {
+            background: #fff3cd;
+        }
         li.sortable-drag {
             background: #ffffff !important;
             box-shadow: 0 8px 20px rgba(0,0,0,0.25);
             box-sizing: border-box !important;
-            width: 100% !important;
-            max-width: 560px !important; 
+            /* 強制鎖死被拖拉時的寬度與清單一致，不准左右飄移 */
+            width: auto !important;
+            max-width: 100% !important;
         }
 
         .station-info { font-size: 14px; color: #666; margin-top: 4px; }
@@ -35,29 +43,17 @@
         .actions button:hover { background-color: #c82333; }
         .search-status { font-size: 12px; color: #007bff; margin-top: 5px; }
         .gps-panel { background: #e2f0d9; padding: 15px; border-radius: 6px; margin-bottom: 15px; border: 1px solid #c8e1b7; }
-        .announcement-panel { background: #fff3cd; padding: 15px; border-radius: 6px; margin-bottom: 15px; border: 1px solid #ffeeba; }
     </style>
 </head>
 <body>
 
     <div class="container">
-        <h2>🚌 駕駛員控制台 (進階導航與廣播版)</h2>
+        <h2>🚌 駕駛員控制台 (GPS 自動導航版)</h2>
         
-        <!-- 🌟 GPS 自動導航狀態面板 (已補回) -->
         <div class="gps-panel">
             <h3>📍 GPS 自動導航狀態</h3>
             <p id="gpsStatus">目前狀態：未開啟 GPS 追蹤</p>
             <button id="toggleGpsBtn" style="background-color: #17a2b8; width: 100%;">開啟 GPS 自動到站追蹤</button>
-        </div>
-
-        <!-- 跑馬燈公告輸入區 -->
-        <div class="announcement-panel">
-            <h3>📢 跑馬燈多媒體廣播設定</h3>
-            <div class="input-row">
-                <input type="text" id="announcementInput" placeholder="輸入疫情、旅遊、政令宣導等跑馬燈內容...">
-                <button id="addAnnouncementBtn" style="background-color: #ffc107; color: #333;">新增廣播</button>
-            </div>
-            <ul id="announcementList" style="margin-top: 10px;"></ul>
         </div>
 
         <div class="input-group">
@@ -75,16 +71,13 @@
         <button id="syncBtn" style="width: 100%; background-color: #007bff; margin-top: 15px;">手動同步更新至跑馬燈</button>
     </div>
 
+    <!-- 引入 Socket.io -->
     <script src="/socket.io/socket.io.js"></script>
     <script>
         const socket = io();
         let stations = [];
-        let announcements = [];
         let watchId = null;
         let currentActiveIndex = 0;
-
-        let hasEnteredStation = false;
-        let minDistanceRecorded = Infinity;
 
         const stationNickname = document.getElementById('stationNickname');
         const stationAddress = document.getElementById('stationAddress');
@@ -95,25 +88,25 @@
         const toggleGpsBtn = document.getElementById('toggleGpsBtn');
         const gpsStatus = document.getElementById('gpsStatus');
 
-        const announcementInput = document.getElementById('announcementInput');
-        const addAnnouncementBtn = document.getElementById('addAnnouncementBtn');
-        const announcementList = document.getElementById('announcementList');
-
+        // 初始化垂直拖拉排序 (SortableJS)
         document.addEventListener('DOMContentLoaded', () => {
             Sortable.create(stationList, {
-                animation: 150,
-                handle: '.drag-handle',
-                direction: 'vertical',
-                forceFallback: true,
-                fallbackAxis: 'y',
+                animation: 150,          // 拖拉放開時的滑順動畫 (毫秒)
+                handle: '.drag-handle',  // 只能拉左邊的 "☰" 圖示
+                direction: 'vertical',   // 限制垂直方向
+                lockAxis: 'y',           // 🌟 強制鎖死 Y 軸，絕對禁止左右移動！
+                forceFallback: true,     // 使用內建 Fallback 確保樣式與軸向鎖定有效
                 onEnd: function (evt) {
                     const oldIndex = evt.oldIndex;
                     const newIndex = evt.newIndex;
+
                     if (oldIndex === newIndex) return;
 
+                    // 調整陣列
                     const movedItem = stations.splice(oldIndex, 1)[0];
                     stations.splice(newIndex, 0, movedItem);
 
+                    // 追蹤並修正目前所在站 (⭐) 的對應索引
                     if (currentActiveIndex === oldIndex) {
                         currentActiveIndex = newIndex;
                     } else if (oldIndex < currentActiveIndex && newIndex >= currentActiveIndex) {
@@ -123,45 +116,12 @@
                     }
 
                     renderStations();
-                    resetStationTracking();
-                    autoSync();
+                    autoSync(); // 自動同步最新排序給跑馬燈
                 }
             });
         });
 
-        addAnnouncementBtn.addEventListener('click', () => {
-            const text = announcementInput.value.trim();
-            if (!text) {
-                alert('請輸入廣播內容！');
-                return;
-            }
-            announcements.push(text);
-            announcementInput.value = '';
-            renderAnnouncements();
-            autoSync();
-        });
-
-        window.removeAnnouncement = function(index) {
-            announcements.splice(index, 1);
-            renderAnnouncements();
-            autoSync();
-        };
-
-        function renderAnnouncements() {
-            announcementList.innerHTML = '';
-            announcements.forEach((item, index) => {
-                const li = document.createElement('li');
-                li.style.background = '#fff';
-                li.style.padding = '5px 10px';
-                li.style.fontSize = '14px';
-                li.innerHTML = `
-                    <span>📢 ${item}</span>
-                    <button onclick="removeAnnouncement(${index})" style="background-color: #dc3545; padding: 2px 6px; font-size: 12px;">刪除</button>
-                `;
-                announcementList.appendChild(li);
-            });
-        }
-
+        // 新增站點
         addBtn.addEventListener('click', async () => {
             const nickname = stationNickname.value.trim();
             const address = stationAddress.value.trim();
@@ -191,12 +151,12 @@
                 stationNickname.value = '';
                 stationAddress.value = '';
                 renderStations();
-                autoSync();
             } catch (error) {
                 searchStatus.textContent = `❌ 地圖服務連線失敗。`;
             }
         });
 
+        // 渲染介面
         function renderStations() {
             stationList.innerHTML = '';
             stations.forEach((station, index) => {
@@ -205,6 +165,7 @@
                     li.classList.add('active-station');
                 }
                 li.dataset.index = index;
+
                 const coordText = station.lat ? `座標: ${station.lat.toFixed(4)}, ${station.lon.toFixed(4)}` : '';
                 
                 li.innerHTML = `
@@ -229,34 +190,38 @@
                 currentActiveIndex = stations.length - 1;
             }
             renderStations();
-            resetStationTracking();
             autoSync();
         };
 
+        // GPS 開關控制
         toggleGpsBtn.addEventListener('click', () => {
             if (watchId === null) {
                 if (!navigator.geolocation) {
                     alert('你的瀏覽器不支援地理定位功能！');
                     return;
                 }
+
                 if (stations.length === 0) {
                     alert('請先新增至少一個站點，才能開啟 GPS 自動導航！');
                     return;
                 }
 
-                gpsStatus.textContent = '目前狀態：GPS 追蹤中...';
+                gpsStatus.textContent = '目前狀態：GPS 追蹤中（正在取得位置...）';
                 toggleGpsBtn.textContent = '關閉 GPS 自動追蹤';
                 toggleGpsBtn.style.backgroundColor = '#dc3545';
-                resetStationTracking();
 
+                // 開始監聽手機/電腦 GPS
                 watchId = navigator.geolocation.watchPosition(
                     position => {
                         const driverLat = position.coords.latitude;
                         const driverLon = position.coords.longitude;
-                        gpsStatus.textContent = `GPS 正常 (緯度: ${driverLat.toFixed(4)}, 經度: ${driverLon.toFixed(4)})`;
-                        checkDistanceAndLogic(driverLat, driverLon);
+                        gpsStatus.textContent = `GPS 正常運作中 (緯度: ${driverLat.toFixed(4)}, 經度: ${driverLon.toFixed(4)})`;
+
+                        checkDistance(driverLat, driverLon);
                     },
-                    error => { gpsStatus.textContent = `❌ GPS 取得失敗: ${error.message}`; },
+                    error => {
+                        gpsStatus.textContent = `❌ GPS 取得失敗: ${error.message}`;
+                    },
                     { enableHighAccuracy: true, maximumAge: 10000, timeout: 5000 }
                 );
             } else {
@@ -268,66 +233,59 @@
             }
         });
 
-        function resetStationTracking() {
-            hasEnteredStation = false;
-            minDistanceRecorded = Infinity;
-        }
-
-        function checkDistanceAndLogic(lat1, lon1) {
+        // 計算距離並自動切換站點
+        function checkDistance(lat1, lon1) {
             if (stations.length === 0) return;
 
-            const currentStation = stations[currentActiveIndex];
-            const dist = getDistanceFromLatLonInMeters(lat1, lon1, currentStation.lat, currentStation.lon);
+            let closestIndex = 0;
+            let minDistance = Infinity;
 
-            let prefix = "下一站: ";
-            let isApproaching = false;
-
-            if (dist < 500) {
-                prefix = "即將到站: ";
-                isApproaching = true;
-                hasEnteredStation = true;
-                if (dist < minDistanceRecorded) {
-                    minDistanceRecorded = dist;
+            stations.forEach((station, index) => {
+                const dist = getDistanceFromLatLonInMeters(lat1, lon1, station.lat, station.lon);
+                if (dist < minDistance) {
+                    minDistance = dist;
+                    closestIndex = index;
                 }
-            }
+            });
 
-            if (hasEnteredStation && dist > minDistanceRecorded + 30) {
-                if (currentActiveIndex < stations.length - 1) {
-                    currentActiveIndex++;
-                    resetStationTracking();
-                    renderStations();
-                }
+            // 只要距離小於 500 公尺，且換了新站就自動切換
+            if (minDistance < 500 && currentActiveIndex !== closestIndex) {
+                currentActiveIndex = closestIndex;
+                renderStations();
+                autoSync(); // 自動廣播給跑馬燈
+                console.log(`自動切換至最近站點: ${stations[closestIndex].name} (距離: ${Math.round(minDistance)}公尺)`);
             }
-
-            autoSync(prefix, isApproaching);
         }
 
+        // 經緯度算距離（公尺）
         function getDistanceFromLatLonInMeters(lat1, lon1, lat2, lon2) {
-            const R = 6371000;
+            const R = 6371000; // 地球半徑 (公尺)
             const dLat = deg2rad(lat2 - lat1);
             const dLon = deg2rad(lon2 - lon1);
-            const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-                      Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) * 
-                      Math.sin(dLon/2) * Math.sin(dLon/2);
+            const a = 
+                Math.sin(dLat/2) * Math.sin(dLat/2) +
+                Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) * 
+                Math.sin(dLon/2) * Math.sin(dLon/2);
             const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
             return R * c;
         }
 
-        function deg2rad(deg) { return deg * (Math.PI / 180); }
+        function deg2rad(deg) {
+            return deg * (Math.PI / 180);
+        }
 
-        function autoSync(prefix = "下一站: ", isApproaching = false) {
+        // 自動同步至伺服器
+        function autoSync() {
             socket.emit('update-stations', {
                 stations: stations,
-                currentIndex: currentActiveIndex,
-                announcements: announcements,
-                prefix: prefix,
-                isApproaching: isApproaching
+                currentIndex: currentActiveIndex
             });
         }
 
+        // 手動同步按鈕
         syncBtn.addEventListener('click', () => {
             autoSync();
-            alert('站點清單與公告已手動同步！');
+            alert('站點清單與目前進度已手動同步！');
         });
     </script>
 </body>
