@@ -1,44 +1,38 @@
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
-const path = require('path');
 
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
-// 設定 public 資料夾為靜態網頁檔案存放處
-app.use(express.static(path.join(__dirname, '../public')));
+// 設定靜態檔案資料夾，讓瀏覽器可以讀取 public 裡的網頁
+app.use(express.static('public'));
 
-// 監聽前端連線
+// 當有使用者連線時
 io.on('connection', (socket) => {
-  console.log('有裝置連線進來了 ID:', socket.id);
+    console.log('有新的使用者連線進來了：', socket.id);
 
-  // 1. 接收乘客按鈴
-  socket.on('press-bell', () => {
-    console.log('🔔 收到下車鈴信號！');
-    io.emit('bell-ring'); // 廣播給所有畫面（跑馬燈端顯示鈴聲與音效）
-  });
+    // 接收駕駛員更新的站點清單
+    socket.on('update-stations', (stations) => {
+        console.log('收到新的站點清單:', stations);
+        // 修改這裡：用 io.emit 廣播，並且事件名稱改成 'update-stations'
+        io.emit('update-stations', stations);
+    });
 
-  // 2. 接收司機端更新的站名或跑馬燈
-  socket.on('update-bus-info', (data) => {
-    console.log('📢 更新公車資訊:', data);
-    io.emit('bus-info-updated', data); // 廣播最新站名給跑馬燈
-  });
-  // 在伺服器端接收並廣播站點更新
-socket.on('update-stations', (newStations) => {
-  // 將最新站點廣播給所有連線的裝置（跑馬燈、乘客端）
-  socket.broadcast.emit('stations-updated', newStations);
+    // 接收駕駛員切換下一站的指令
+    socket.on('update-next-station', (station) => {
+        // 廣播給所有人當前站點
+        io.emit('next-station-changed', station);
+    });
+
+    socket.on('disconnect', () => {
+        console.log('使用者已離線：', socket.id);
+    });
 });
 
-
-  socket.on('disconnect', () => {
-    console.log('有裝置離線了');
-  });
-});
-
-const PORT = process.env.PORT || 3000;
+// 啟動伺服器，監聽 3000 通訊埠
+const PORT = 3000;
 server.listen(PORT, () => {
-  console.log(`伺服器已啟動，請打開網址：http://localhost:${PORT}`);
+    console.log(`伺服器已啟動！請在瀏覽器輸入: http://localhost:${PORT}/driver.html`);
 });
-
