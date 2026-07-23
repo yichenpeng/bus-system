@@ -5,253 +5,299 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>公車 LED 跑馬燈 - 顯示幕</title>
     <style>
-        body {
-            background-color: #000;
-            color: #ff3300;
+        html, body {
+            margin: 0; padding: 0; width: 100%; height: 100%;
+            background: #000; overflow: hidden;
+        }
+
+        /*
+          設計理念：所有版面都用「固定像素」設計在一個 1280x720 的虛擬舞台(.stage)裡，
+          再由 JS 依照實際裝置螢幕大小計算等比縮放倍率，整體縮放 + 置中。
+          這樣不管手機、平板、車用顯示器的尺寸或長寬比為何，畫面的相對比例、
+          文字大小、跑馬燈速度看起來永遠一致，只是整體被放大或縮小而已。
+        */
+        #stage {
+            position: fixed;
+            top: 0; left: 0;
+            width: 1280px;
+            height: 720px;
+            transform-origin: top left;
+            background: #000;
             font-family: 'Courier New', Courier, monospace;
-            margin: 0;
+            box-sizing: border-box;
+        }
+
+        .frame {
+            width: 100%; height: 100%;
+            box-sizing: border-box;
             padding: 40px;
             display: flex;
             flex-direction: column;
-            justify-content: center;
-            height: 100vh;
-            box-sizing: border-box;
         }
-        .marquee-container {
+
+        .panel {
+            flex: 1;
             background: #110000;
             border: 4px solid #440000;
-            padding: 30px;
-            border-radius: 10px;
-            box-shadow: 0 0 20px rgba(255, 51, 0, 0.3);
+            border-radius: 14px;
+            box-shadow: 0 0 30px rgba(255, 51, 0, 0.25);
+            display: flex;
+            flex-direction: column;
+            padding: 30px 40px;
+            box-sizing: border-box;
         }
-        h1 { font-size: 28px; color: #ffaa00; margin-top: 0; text-transform: uppercase; border-bottom: 2px dashed #440000; padding-bottom: 10px; }
 
-        .current-station { font-size: 64px; font-weight: bold; margin: 20px 0; text-shadow: 0 0 10px rgba(255, 51, 0, 0.7); transition: color 0.2s; }
-        .current-station.arriving { color: #ffdd00; animation: stationBlink 0.6s infinite alternate; }
-        @keyframes stationBlink { from { opacity: 1; } to { opacity: 0.3; } }
+        h1 {
+            font-size: 30px; color: #ffaa00; margin: 0 0 16px 0;
+            text-transform: uppercase; letter-spacing: 2px;
+            border-bottom: 2px dashed #440000; padding-bottom: 14px;
+        }
 
-        .next-station { font-size: 24px; color: #aa5500; }
-
-        /* 下車鈴橫幅 */
+        /* 下車鈴橫幅：蓋在最上層，任何時候有人按鈴就會出現 */
         .bell-banner {
             display: none;
-            font-size: 32px; font-weight: bold; color: #fff; background: #cc0000;
-            padding: 15px; margin: 15px 0; border-radius: 8px; text-align: center;
+            font-size: 34px; font-weight: bold; color: #fff; background: #cc0000;
+            padding: 16px; margin-bottom: 16px; border-radius: 10px; text-align: center;
         }
         .bell-banner.active { display: block; animation: bellFlash 0.5s infinite alternate; }
         @keyframes bellFlash { from { background: #cc0000; } to { background: #ff3333; } }
 
-        /* 宣導訊息跑馬燈區 */
-        .announce-box {
-            margin-top: 25px;
-            height: 60px;
-            overflow: hidden;
-            position: relative;
+        /*
+          ★ 統一顯示器：報站資訊（下一站 / 即將到站）與政令宣導共用同一個跑馬燈區域，
+          不再分成兩列。距離 <=500 公尺（即將到站）時，此區會被強制接管，優先權最高。
+        */
+        .main-display {
+            flex: 1;
+            margin-top: 6px;
             background: #0a0a0a;
             border: 2px solid #330000;
-            border-radius: 6px;
+            border-radius: 10px;
+            overflow: hidden;
+            position: relative;
             display: flex;
             align-items: center;
         }
-        .announce-text {
-            font-size: 32px;
-            color: #00ff66;
+        .display-text {
+            font-size: 68px;
+            font-weight: bold;
+            color: #ffaa00;
             white-space: nowrap;
-            padding-left: 20px;
+            padding-left: 30px;
+            text-shadow: 0 0 12px rgba(255, 170, 0, 0.6);
         }
-        .announce-text.scrolling {
+        .display-text.scrolling {
             position: absolute;
             will-change: transform;
             animation-name: scrollLeft;
             animation-timing-function: linear;
             animation-iteration-count: 1;
         }
-        .announce-text.static {
-            position: relative;
-            width: 100%;
+        .display-text.static { position: relative; width: 100%; }
+
+        /* 即將到站：最高優先權，強制閃爍蓋台 */
+        .display-text.forced {
+            color: #ff3300;
+            text-shadow: 0 0 20px rgba(255, 51, 0, 0.9);
+            animation: forcedBlink 0.6s infinite alternate;
         }
-        .announce-text.forced {
-            color: #ffdd00;
-            animation: stationBlink 0.6s infinite alternate;
-        }
+        @keyframes forcedBlink { from { opacity: 1; } to { opacity: 0.35; } }
+
         @keyframes scrollLeft {
             from { transform: translateX(0); }
             to { transform: translateX(-100%); }
         }
 
-        .station-list-preview { margin-top: 20px; font-size: 14px; color: #662200; }
+        .route-preview {
+            margin-top: 18px;
+            font-size: 18px;
+            color: #662200;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
     </style>
 </head>
 <body>
 
-    <div class="container marquee-container">
-        <h1>🚌 本次行駛路線與即時站點</h1>
+    <div id="stage">
+        <div class="frame">
+            <div class="panel">
+                <h1>🚌 本次行駛路線與即時資訊</h1>
 
-        <div class="bell-banner" id="bellBanner">🔔 有乘客按鈴，請準備停靠 🔔</div>
+                <div class="bell-banner" id="bellBanner">🔔 有乘客按鈴，請準備停靠 🔔</div>
 
-        <div class="station-info">
-            <div class="current-station" id="currentStationText">---</div>
+                <div class="main-display">
+                    <div class="display-text" id="displayText">歡迎搭乘，祝您旅途愉快</div>
+                </div>
+
+                <div class="route-preview" id="previewText">完整路線：尚未載入</div>
+            </div>
         </div>
-
-        <div class="announce-box">
-            <div class="announce-text" id="announceText">歡迎搭乘，祝您旅途愉快</div>
-        </div>
-
-        <div class="station-list-preview" id="previewText">完整站點：尚未載入</div>
     </div>
 
     <!-- 引入 Socket.io -->
     <script src="/socket.io/socket.io.js"></script>
     <script>
+        // ---------- 固定舞台等比縮放：確保各種裝置畫面比例一致 ----------
+        const STAGE_WIDTH = 1280;
+        const STAGE_HEIGHT = 720;
+        const stage = document.getElementById('stage');
+
+        function fitStage() {
+            const scale = Math.min(
+                window.innerWidth / STAGE_WIDTH,
+                window.innerHeight / STAGE_HEIGHT
+            );
+            const offsetX = (window.innerWidth - STAGE_WIDTH * scale) / 2;
+            const offsetY = (window.innerHeight - STAGE_HEIGHT * scale) / 2;
+
+            stage.style.transform = `scale(${scale})`;
+            stage.style.left = offsetX + 'px';
+            stage.style.top = offsetY + 'px';
+        }
+        window.addEventListener('resize', fitStage);
+        window.addEventListener('orientationchange', fitStage);
+        fitStage();
+
+        // ---------- Socket 連線與資料 ----------
         const socket = io();
 
-        const currentStationText = document.getElementById('currentStationText');
         const previewText = document.getElementById('previewText');
         const bellBanner = document.getElementById('bellBanner');
-        const announceBox = document.querySelector('.announce-box');
-        const announceTextEl = document.getElementById('announceText');
+        const mainDisplay = document.querySelector('.main-display');
+        const displayTextEl = document.getElementById('displayText');
 
         let stations = [];
         let targetIndex = 0;
         let stationPhase = 'next'; // 'next' | 'arriving' | 'finished'
-
         let announcements = []; // [{id, text}]
+
         let rotateIndex = 0;
-        let rotateTimer = null;      // 固定秒數換下一則用的計時器
-        let isForced = false;        // 是否正被「即將到站」強制接管
+        let rotateTimer = null;
+        let isForced = false; // 是否正被「即將到站」強制接管（最高優先權）
 
         const STATIC_DISPLAY_MS = 5000; // 短訊息固定顯示秒數
+        const PX_PER_SECOND = 260;       // 跑馬燈捲動速度（以舞台的 1280px 虛擬座標計算，縮放後各裝置視覺速度一致）
 
-        // ---- 接收伺服器完整狀態 ----
         socket.on('full-state', (data) => {
             stations = data.stations || [];
             targetIndex = data.targetIndex || 0;
             stationPhase = data.stationPhase || 'next';
             announcements = data.announcements || [];
-            renderStationInfo();
             if (data.bellActive) bellBanner.classList.add('active');
-            restartAnnounceRotation();
+            renderPreview();
+            applyForcedStateIfNeeded();
+            if (!isForced) restartRotation();
         });
 
         socket.on('stations-update', (data) => {
             stations = data.stations || [];
             targetIndex = data.targetIndex || 0;
             stationPhase = data.stationPhase || 'next';
-            renderStationInfo();
+            renderPreview();
+            applyForcedStateIfNeeded();
         });
 
         socket.on('announcements-update', (data) => {
             announcements = data.announcements || [];
             rotateIndex = 0;
-            if (!isForced) restartAnnounceRotation();
+            if (!isForced) restartRotation();
         });
 
         socket.on('bell-ring', () => bellBanner.classList.add('active'));
         socket.on('bell-clear', () => bellBanner.classList.remove('active'));
 
-        // ---- 站點資訊顯示 ----
-        function renderStationInfo() {
+        function renderPreview() {
             if (!stations || stations.length === 0) {
-                currentStationText.textContent = '---';
-                currentStationText.classList.remove('arriving');
-                previewText.textContent = '完整站點：無';
+                previewText.textContent = '完整路線：尚未載入';
                 return;
             }
-
-            if (stationPhase === 'finished' || targetIndex >= stations.length) {
-                currentStationText.textContent = '🏁 本班已抵達最後一站';
-                currentStationText.classList.remove('arriving');
-            } else {
-                const target = stations[targetIndex];
-                if (stationPhase === 'arriving') {
-                    currentStationText.textContent = `即將到站：${target.name}`;
-                    currentStationText.classList.add('arriving');
-                } else {
-                    currentStationText.textContent = `下一站：${target.name}`;
-                    currentStationText.classList.remove('arriving');
-                }
-            }
-
             const names = stations.map((s, idx) => idx === targetIndex ? `[${s.name}]` : s.name).join(' ➔ ');
             previewText.textContent = `完整路線：${names}`;
-
-            applyForcedStateIfNeeded();
         }
 
-        // ---- 到站前 500 公尺內，強制切換跑馬燈為「即將到站」閃爍，蓋過一般宣導輪播 ----
+        // ---------- 核心：把「報站訊息」跟「宣導訊息」合併成同一份輪播清單 ----------
+        function buildQueue() {
+            const queue = [];
+
+            if (!stations || stations.length === 0) {
+                queue.push('---');
+            } else if (stationPhase === 'finished' || targetIndex >= stations.length) {
+                queue.push('🏁 本班已抵達最後一站');
+            } else {
+                // 只有「下一站」狀態才會排進輪播；「即將到站」是最高優先權，由 applyForcedStateIfNeeded 直接接管
+                queue.push(`下一站：${stations[targetIndex].name}`);
+            }
+
+            announcements.forEach(a => queue.push(a.text));
+
+            if (queue.length === 0) queue.push('歡迎搭乘，祝您旅途愉快');
+            return queue;
+        }
+
+        // 即將到站（<=500 公尺）：最高優先權，強制蓋過整個輪播，直接閃爍顯示
         function applyForcedStateIfNeeded() {
-            const shouldForce = (stationPhase === 'arriving' && targetIndex < stations.length);
+            const shouldForce = (stationPhase === 'arriving' && stations.length > 0 && targetIndex < stations.length);
 
             if (shouldForce && !isForced) {
-                // 進入強制狀態：停止一般輪播
                 isForced = true;
                 clearTimeout(rotateTimer);
-                announceTextEl.classList.remove('scrolling', 'static');
-                announceTextEl.style.animation = 'none';
-                announceTextEl.classList.add('forced');
-                announceTextEl.style.position = 'relative';
-                announceTextEl.textContent = `🚏 即將到站：${stations[targetIndex].name}，請準備下車`;
+                displayTextEl.classList.remove('scrolling', 'static');
+                displayTextEl.style.animation = 'none';
+                displayTextEl.classList.add('forced');
+                displayTextEl.style.position = 'relative';
+                displayTextEl.textContent = `🚏 即將到站：${stations[targetIndex].name}，請準備下車`;
             } else if (!shouldForce && isForced) {
-                // 離開強制狀態：恢復一般宣導輪播
                 isForced = false;
-                announceTextEl.classList.remove('forced');
-                restartAnnounceRotation();
+                displayTextEl.classList.remove('forced');
+                restartRotation();
             }
         }
 
-        // ---- 宣導訊息輪播（跑馬燈捲動 或 固定秒數切換） ----
-        function restartAnnounceRotation() {
+        function restartRotation() {
             clearTimeout(rotateTimer);
-            if (isForced) return; // 強制狀態時不啟動一般輪播
-
-            if (!announcements || announcements.length === 0) {
-                announceTextEl.classList.remove('scrolling', 'forced');
-                announceTextEl.classList.add('static');
-                announceTextEl.style.animation = 'none';
-                announceTextEl.textContent = '歡迎搭乘，祝您旅途愉快';
-                return;
-            }
-            showAnnouncement(rotateIndex % announcements.length);
-        }
-
-        function showAnnouncement(index) {
             if (isForced) return;
 
-            const item = announcements[index];
-            announceTextEl.classList.remove('scrolling', 'static', 'forced');
-            announceTextEl.style.animation = 'none';
-            announceTextEl.textContent = item.text;
+            const queue = buildQueue();
+            rotateIndex = rotateIndex % queue.length;
+            showMessage(queue, rotateIndex);
+        }
 
-            // 先量測文字寬度，決定要捲動還是固定顯示
+        function showMessage(queue, index) {
+            if (isForced) return;
+
+            displayTextEl.classList.remove('scrolling', 'static', 'forced');
+            displayTextEl.style.animation = 'none';
+            displayTextEl.textContent = queue[index];
+
             requestAnimationFrame(() => {
-                const containerWidth = announceBox.clientWidth;
-                const textWidth = announceTextEl.scrollWidth;
+                const containerWidth = mainDisplay.clientWidth;
+                const textWidth = displayTextEl.scrollWidth;
 
                 if (textWidth > containerWidth) {
-                    // 太長 -> 跑馬燈捲動，速度固定（每秒約 120px），跑完換下一則
-                    const pxPerSecond = 120;
+                    // 太長 -> 跑馬燈捲動，跑完自動換下一則
                     const totalDistance = textWidth + containerWidth;
-                    const duration = Math.max(4, totalDistance / pxPerSecond);
+                    const duration = Math.max(4, totalDistance / PX_PER_SECOND);
 
-                    announceTextEl.classList.add('scrolling');
-                    announceTextEl.style.left = containerWidth + 'px';
-                    announceTextEl.style.animationDuration = duration + 's';
-                    // 強制觸發 reflow 讓動畫重新開始
-                    void announceTextEl.offsetWidth;
-                    announceTextEl.style.animation = `scrollLeft ${duration}s linear 1`;
+                    displayTextEl.classList.add('scrolling');
+                    displayTextEl.style.left = containerWidth + 'px';
+                    void displayTextEl.offsetWidth; // 強制 reflow，讓動畫重新開始
+                    displayTextEl.style.animation = `scrollLeft ${duration}s linear 1`;
 
-                    announceTextEl.onanimationend = () => {
+                    displayTextEl.onanimationend = () => {
                         if (isForced) return;
-                        rotateIndex = (index + 1) % announcements.length;
-                        showAnnouncement(rotateIndex);
+                        const nextQueue = buildQueue();
+                        rotateIndex = (index + 1) % nextQueue.length;
+                        showMessage(nextQueue, rotateIndex);
                     };
                 } else {
                     // 夠短 -> 固定顯示幾秒後換下一則
-                    announceTextEl.classList.add('static');
+                    displayTextEl.classList.add('static');
                     rotateTimer = setTimeout(() => {
                         if (isForced) return;
-                        rotateIndex = (index + 1) % announcements.length;
-                        showAnnouncement(rotateIndex);
+                        const nextQueue = buildQueue();
+                        rotateIndex = (index + 1) % nextQueue.length;
+                        showMessage(nextQueue, rotateIndex);
                     }, STATIC_DISPLAY_MS);
                 }
             });
