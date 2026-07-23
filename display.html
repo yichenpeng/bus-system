@@ -50,25 +50,32 @@
         const nextStationText = document.getElementById('nextStationText');
         const previewText = document.getElementById('previewText');
 
-        // 接收來自後端的站點更新
-        socket.on('update-stations', (stations) => {
-            if (!stations || stations.length === 0) {目前
+        // 接收來自後端的站點與進度更新
+        socket.on('update-stations', (data) => {
+            // 相容接收物件格式或舊的純陣列格式
+            const stations = data.stations ? data.stations : data;
+            const currentIndex = (data.currentIndex !== undefined) ? data.currentIndex : 0;
+
+            if (!stations || stations.length === 0) {
                 currentStationText.textContent = '---';
                 nextStationText.textContent = '下一站：無站點資料';
                 previewText.textContent = '完整站點：無';
                 return;
             }
 
-            // 暫時預設顯示第一個站點作為示範
-            currentStationText.textContent = `即將到站：${stations[0].name}`;
-            if (stations.length > 1) {
-                nextStationText.textContent = `下一站：${stations[1].name}`;
+            // 顯示當前所在站
+            const activeStation = stations[currentIndex] ? stations[currentIndex].name : '未知站點';
+            currentStationText.textContent = `即將到站：${activeStation}`;
+
+            // 顯示下一站
+            if (currentIndex + 1 < stations.length) {
+                nextStationText.textContent = `下一站：${stations[currentIndex + 1].name}`;
             } else {
                 nextStationText.textContent = `已是最後一站`;
             }
 
-            // 顯示所有站點的清單預覽
-            const names = stations.map(s => s.name).join(' ➔ ');
+            // 顯示所有站點的清單預覽（帶有目前所在站標記）
+            const names = stations.map((s, idx) => idx === currentIndex ? `[${s.name}]` : s.name).join(' ➔ ');
             previewText.textContent = `完整路線：${names}`;
         });
     </script>
