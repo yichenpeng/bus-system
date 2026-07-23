@@ -102,7 +102,6 @@
             }
         });
 
-       // 渲染介面（支援 HTML5 拖拉排序）
 // 渲染介面
 function renderStations() {
     stationList.innerHTML = '';
@@ -117,13 +116,13 @@ function renderStations() {
         
         li.innerHTML = `
             <div style="display: flex; align-items: center; gap: 10px; width: 100%;">
-                <span class="drag-handle" style="cursor: ns-resize; color: #888; font-size: 20px; padding: 0 5px;">☰</span>
+                <span class="drag-handle">☰</span>
                 <div style="flex: 1;">
                     <strong>${index + 1}. ${station.name}</strong> ${index === currentActiveIndex ? '⭐(目前所在站)' : ''}
                     <div class="station-info">${station.address} | ${coordText}</div>
                 </div>
                 <div class="actions">
-                    <button onclick="removeStation(${index})" style="background-color: #dc3545; padding: 5px 10px; font-size: 14px;">刪除</button>
+                    <button onclick="removeStation(${index})">刪除</button>
                 </div>
             </div>
         `;
