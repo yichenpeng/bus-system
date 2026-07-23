@@ -14,10 +14,14 @@ app.use(express.static(path.join(__dirname)));
 io.on('connection', (socket) => {
     console.log('有使用者連線進來了:', socket.id);
 
-    // 接收駕駛介面傳來的站名或狀態更新
-    socket.on('update-marquee', (data) => {
-        // 廣播給所有連線的人（像是乘客端、LED 顯示器端）
-        io.emit('marquee-updated', data);
+    // 接收駕駛介面傳來的站點清單更新，並廣播給所有連線的人（顯示幕等）
+    socket.on('update-stations', (stations) => {
+        io.emit('update-stations', stations);
+    });
+
+    // 接收乘客端的下車鈴訊號，並廣播給駕駛或其他端
+    socket.on('press-bell', () => {
+        io.emit('bell-ring');
     });
 
     socket.on('disconnect', () => {
