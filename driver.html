@@ -1,6 +1,7 @@
  <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.2/Sortable.min.js"></script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>公車 LED 跑馬燈 - 駕駛員控制台</title>
@@ -102,6 +103,7 @@
         });
 
        // 渲染介面（支援 HTML5 拖拉排序）
+// 渲染介面
 function renderStations() {
     stationList.innerHTML = '';
     stations.forEach((station, index) => {
@@ -109,22 +111,13 @@ function renderStations() {
         if (index === currentActiveIndex) {
             li.classList.add('active-station');
         }
-        
-        // 設定為可拖拉
-        li.setAttribute('draggable', 'true');
         li.dataset.index = index;
-
-        // 綁定拖拉事件
-        li.addEventListener('dragstart', handleDragStart);
-        li.addEventListener('dragover', handleDragOver);
-        li.addEventListener('drop', handleDrop);
-        li.addEventListener('dragend', handleDragEnd);
 
         const coordText = station.lat ? `座標: ${station.lat.toFixed(4)}, ${station.lon.toFixed(4)}` : '';
         
         li.innerHTML = `
-            <div style="cursor: grab; display: flex; align-items: center; gap: 8px; width: 100%;">
-                <span style="color: #999; font-size: 18px;">☰</span>
+            <div style="display: flex; align-items: center; gap: 10px; width: 100%;">
+                <span class="drag-handle" style="cursor: ns-resize; color: #888; font-size: 20px; padding: 0 5px;">☰</span>
                 <div style="flex: 1;">
                     <strong>${index + 1}. ${station.name}</strong> ${index === currentActiveIndex ? '⭐(目前所在站)' : ''}
                     <div class="station-info">${station.address} | ${coordText}</div>
@@ -137,52 +130,6 @@ function renderStations() {
         stationList.appendChild(li);
     });
 }
-
-// 拖拉排序變數
-let draggedIndex = null;
-
-function handleDragStart(e) {
-    draggedIndex = parseInt(this.dataset.index);
-    e.dataTransfer.effectAllowed = 'move';
-    this.style.opacity = '0.4'; // 拖拉時半透明
-}
-
-function handleDragOver(e) {
-    e.preventDefault(); // 必須阻擋預設行為才能觸發 drop
-    e.dataTransfer.dropEffect = 'move';
-}
-
-function handleDrop(e) {
-    e.preventDefault();
-    const targetIndex = parseInt(this.dataset.index);
-
-    if (draggedIndex === targetIndex) return;
-
-    // 重新排列陣列
-    const movedItem = stations.splice(draggedIndex, 1)[0];
-    stations.splice(targetIndex, 0, movedItem);
-
-    // 追蹤並修正目前所在站 (⭐) 的對應索引
-    if (currentActiveIndex === draggedIndex) {
-        currentActiveIndex = targetIndex;
-    } else if (draggedIndex < currentActiveIndex && targetIndex >= currentActiveIndex) {
-        currentActiveIndex--;
-    } else if (draggedIndex > currentActiveIndex && targetIndex <= currentActiveIndex) {
-        currentActiveIndex++;
-    }
-
-    renderStations();
-    autoSync(); // 自動同步最新排序給跑馬燈
-}
-
-function handleDragEnd(e) {
-    this.style.opacity = '1';
-    // 移除所有視覺提示
-    document.querySelectorAll('#stationList li').forEach(li => {
-        li.style.border = '1px solid #ddd';
-    });
-}
-
 window.removeStation = function(index) {
     stations.splice(index, 1);
     if (currentActiveIndex >= stations.length && stations.length > 0) {
