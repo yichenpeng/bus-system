@@ -6,79 +6,243 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>公車 LED 跑馬燈 - 駕駛員控制台</title>
     <style>
-        .drag-handle { cursor: ns-resize; color: #888; font-size: 20px; padding: 0 5px; user-select: none; }
-        body { font-family: Arial, sans-serif; margin: 20px; background-color: #f4f4f9; }
-        .container { max-width: 600px; margin: auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
-        h2 { color: #333; text-align: center; }
+        * { box-sizing: border-box; }
+        body { font-family: Arial, sans-serif; margin: 0; background-color: #f4f4f9; padding-bottom: 70px; }
+        .container { max-width: 600px; margin: auto; padding: 15px; }
+        h2 { color: #333; text-align: center; margin: 15px 0; }
+        h3 { color: #333; }
         .input-group { display: flex; flex-direction: column; gap: 10px; margin-bottom: 15px; background: #fafafa; padding: 15px; border-radius: 6px; border: 1px solid #eee; }
         .input-row { display: flex; gap: 10px; }
         input { flex: 1; padding: 10px; font-size: 16px; border: 1px solid #ccc; border-radius: 4px; }
         button { padding: 10px 15px; font-size: 16px; background-color: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer; }
         button:hover { background-color: #218838; }
         ul { list-style: none; padding: 0; }
-        
+
         /* 一般站點樣式 */
+        .drag-handle { cursor: ns-resize; color: #888; font-size: 20px; padding: 0 5px; user-select: none; }
         li { background: #fff; border: 1px solid #ddd; margin-bottom: 8px; padding: 10px; display: flex; justify-content: space-between; align-items: center; border-radius: 4px; transition: background-color 0.2s; }
         li.active-station { border: 2px solid #007bff; background-color: #e8f4fd; }
-
-        /* 🌟 嚴格限制拖拉時的樣式與寬度，防止左右亂跑 */
-        li.sortable-ghost {
-            opacity: 0.3;
-            background: #e2e8f0;
-        }
-        li.sortable-chosen {
-            background: #fff3cd;
-        }
+        li.sortable-ghost { opacity: 0.3; background: #e2e8f0; }
+        li.sortable-chosen { background: #fff3cd; }
         li.sortable-drag {
             background: #ffffff !important;
             box-shadow: 0 8px 20px rgba(0,0,0,0.25);
             box-sizing: border-box !important;
-            /* 強制鎖死被拖拉時的寬度與清單一致，不准左右飄移 */
             width: auto !important;
             max-width: 100% !important;
         }
 
         .station-info { font-size: 14px; color: #666; margin-top: 4px; }
-        .actions button { background-color: #dc3545; margin-left: 5px; padding: 5px 10px; font-size: 14px; }
-        .actions button:hover { background-color: #c82333; }
+        .actions { display: flex; gap: 5px; }
+        .actions button { background-color: #6c757d; margin-left: 5px; padding: 5px 10px; font-size: 13px; }
+        .actions button.set-target-btn { background-color: #007bff; }
+        .actions button.set-target-btn:hover { background-color: #0069d9; }
+        .actions button.delete-btn { background-color: #dc3545; }
+        .actions button.delete-btn:hover { background-color: #c82333; }
         .search-status { font-size: 12px; color: #007bff; margin-top: 5px; }
         .gps-panel { background: #e2f0d9; padding: 15px; border-radius: 6px; margin-bottom: 15px; border: 1px solid #c8e1b7; }
+        .gps-status-line { font-size: 14px; margin: 4px 0; }
+
+        /* 宣導訊息清單 */
+        #announceList li { align-items: flex-start; }
+        .announce-text { flex: 1; word-break: break-all; }
+
+        /* ---- 分頁切換列（固定在底部，方便行車中單手操作） ---- */
+        .tab-bar {
+            position: fixed; bottom: 0; left: 0; right: 0;
+            display: flex; background: #fff; border-top: 1px solid #ddd;
+            box-shadow: 0 -2px 10px rgba(0,0,0,0.1); z-index: 100;
+        }
+        .tab-btn {
+            flex: 1; background: #fff; color: #666; border: none; border-radius: 0;
+            padding: 12px 5px; font-size: 14px; text-align: center; cursor: pointer;
+        }
+        .tab-btn.active { color: #007bff; font-weight: bold; border-top: 3px solid #007bff; background: #eef6ff; }
+        .tab-btn:hover { background: #f0f0f0; }
+
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+
+        /* ---- 下車鈴橫幅：固定在最上方，不管切到哪一頁都看得到 ---- */
+        .bell-banner {
+            display: none;
+            position: sticky; top: 0; z-index: 200;
+            background: #cc0000; color: #fff; text-align: center;
+            padding: 14px; font-size: 17px; font-weight: bold;
+        }
+        .bell-banner.active { display: block; animation: bellPulse 0.8s infinite alternate; }
+        @keyframes bellPulse { from { background: #cc0000; } to { background: #ff3333; } }
+        .bell-banner button {
+            margin-left: 12px; background: #fff; color: #cc0000; font-size: 14px; padding: 6px 12px;
+        }
+
+        /* ---- 分頁2：到站按鈕（大按鈕，行車中方便操作） ---- */
+        .arrival-page { display: flex; flex-direction: column; align-items: center; padding-top: 10px; }
+        .current-target-box {
+            width: 100%; background: #fff; border-radius: 10px; padding: 20px; text-align: center;
+            border: 2px solid #ddd; margin-bottom: 20px;
+        }
+        .current-target-label { font-size: 15px; color: #888; }
+        .current-target-name { font-size: 30px; font-weight: bold; color: #333; margin: 6px 0; }
+        .current-target-dist { font-size: 15px; color: #666; }
+        .current-target-box.arriving { border-color: #ffc107; background: #fff9e6; }
+        .current-target-box.arriving .current-target-name { color: #d39e00; }
+
+        .big-confirm-btn {
+            width: 100%; max-width: 420px; aspect-ratio: 1.6 / 1;
+            font-size: 24px; font-weight: bold; color: #fff;
+            background: linear-gradient(145deg, #34d058, #218838);
+            border: none; border-radius: 20px; box-shadow: 0 8px 20px rgba(40,167,69,0.4);
+            cursor: pointer;
+        }
+        .big-confirm-btn:active { transform: scale(0.97); }
+        .big-confirm-btn.arriving {
+            background: linear-gradient(145deg, #ffd54f, #ffa000);
+            box-shadow: 0 8px 25px rgba(255,160,0,0.6);
+            animation: confirmPulse 0.8s infinite alternate;
+        }
+        @keyframes confirmPulse { from { opacity: 1; } to { opacity: 0.75; } }
+
+        .secondary-nav { display: flex; gap: 12px; margin-top: 20px; width: 100%; max-width: 420px; }
+        .secondary-nav button { flex: 1; background-color: #6c757d; font-size: 14px; padding: 12px; }
+        .secondary-nav button:hover { background-color: #5a6268; }
+
+        .gps-toggle-mini { width: 100%; max-width: 420px; margin-top: 20px; background-color: #17a2b8; }
+
+        /* ---- 分頁3：結算時間 ---- */
+        .arrival-log-panel table { width: 100%; border-collapse: collapse; font-size: 14px; }
+        .arrival-log-panel th, .arrival-log-panel td { border: 1px solid #ddd; padding: 6px 8px; text-align: left; }
+        .arrival-log-panel th { background: #f0f0f0; }
+        .log-actions { display: flex; gap: 10px; margin-top: 10px; }
+        .log-actions button { flex: 1; font-size: 14px; }
+        .log-actions .export-btn { background-color: #007bff; }
+        .log-actions .export-btn:hover { background-color: #0069d9; }
+        .log-actions .clear-log-btn { background-color: #dc3545; }
+        .log-actions .clear-log-btn:hover { background-color: #c82333; }
     </style>
 </head>
 <body>
 
+    <!-- 下車鈴提示：固定在最上方，任何分頁都會顯示 -->
+    <div class="bell-banner" id="bellBanner">
+        🔔 有乘客按鈴，請準備停靠！
+        <button id="clearBellBtn">已確認</button>
+    </div>
+
     <div class="container">
-        <h2>🚌 駕駛員控制台 (GPS 自動導航版)</h2>
-        
-        <div class="gps-panel">
-            <h3>📍 GPS 自動導航狀態</h3>
-            <p id="gpsStatus">目前狀態：未開啟 GPS 追蹤</p>
-            <button id="toggleGpsBtn" style="background-color: #17a2b8; width: 100%;">開啟 GPS 自動到站追蹤</button>
-        </div>
 
-        <div class="input-group">
-            <div class="input-row">
-                <input type="text" id="stationNickname" placeholder="跑馬燈顯示名稱（例如：總公司）">
-                <input type="text" id="stationAddress" placeholder="真實地址/地標（例如：台北市信義路五段7號）">
+        <!-- ========== 分頁 1：編輯站點與廣播 ========== -->
+        <div class="tab-content active" id="tab-edit">
+            <h2>📝 站點與廣播設定</h2>
+
+            <div class="gps-panel">
+                <h3 style="margin-top:0;">📍 GPS 自動導航狀態</h3>
+                <p id="gpsStatus">目前狀態：未開啟 GPS 追蹤</p>
+                <p class="gps-status-line" id="distanceStatus">尚無距離資料</p>
+                <button id="toggleGpsBtn" style="background-color: #17a2b8; width: 100%;">開啟 GPS 自動到站追蹤</button>
             </div>
-            <button id="addBtn">新增站點</button>
-            <div id="searchStatus" class="search-status"></div>
+
+            <div class="input-group">
+                <div class="input-row">
+                    <input type="text" id="stationNickname" placeholder="跑馬燈顯示名稱（例如：總公司）">
+                    <input type="text" id="stationAddress" placeholder="真實地址/地標（例如：台北市信義路五段7號）">
+                </div>
+                <button id="addBtn">新增站點</button>
+                <div id="searchStatus" class="search-status"></div>
+            </div>
+
+            <h3>站點清單（🎯 = 目前前往的目標站）</h3>
+            <ul id="stationList"></ul>
+
+            <button id="syncBtn" style="width: 100%; background-color: #007bff; margin-top: 15px;">手動同步更新至跑馬燈</button>
+
+            <hr style="margin: 25px 0;">
+
+            <h3>📢 跑馬燈宣導訊息（疫情資訊 / 旅遊資訊 / 政令宣導...）</h3>
+            <div class="input-group">
+                <div class="input-row">
+                    <input type="text" id="announceInput" placeholder="輸入宣導訊息，例如：請配合防疫規定佩戴口罩">
+                    <button id="addAnnounceBtn">新增訊息</button>
+                </div>
+                <div style="font-size:12px; color:#888;">提示：文字太短會固定顯示幾秒後換下一則；文字太長會自動用跑馬燈捲動。到站前 500 公尺內會強制切換為「即將到站」閃爍提示。</div>
+            </div>
+            <ul id="announceList"></ul>
         </div>
 
-        <h3>站點清單</h3>
-        <ul id="stationList"></ul>
+        <!-- ========== 分頁 2：到站按鈕 ========== -->
+        <div class="tab-content" id="tab-arrival">
+            <h2>🔔 到站操作</h2>
 
-        <button id="syncBtn" style="width: 100%; background-color: #007bff; margin-top: 15px;">手動同步更新至跑馬燈</button>
+            <div class="arrival-page">
+                <div class="current-target-box" id="currentTargetBox">
+                    <div class="current-target-label" id="currentTargetLabel">下一站</div>
+                    <div class="current-target-name" id="currentTargetName">尚未載入站點</div>
+                    <div class="current-target-dist" id="currentTargetDist"></div>
+                </div>
+
+                <button id="bigConfirmBtn" class="big-confirm-btn">✅ 確認到站<br>（上下客完成，前往下一站）</button>
+
+                <div class="secondary-nav">
+                    <button id="prevStationBtn2">⬅️ 修正：回上一站</button>
+                    <button id="skipStationBtn2">⏭️ 跳過此站</button>
+                </div>
+
+                <button id="toggleGpsBtn2" class="gps-toggle-mini">開啟 GPS 自動到站追蹤</button>
+            </div>
+        </div>
+
+        <!-- ========== 分頁 3：結算時間 ========== -->
+        <div class="tab-content" id="tab-log">
+            <h2>🕒 到站時間結算</h2>
+            <div class="arrival-log-panel">
+                <table>
+                    <thead><tr><th>#</th><th>站名</th><th>到站時間</th></tr></thead>
+                    <tbody id="arrivalLogBody"></tbody>
+                </table>
+                <div class="log-actions">
+                    <button class="export-btn" id="exportLogBtn">📄 匯出紀錄 (CSV)</button>
+                    <button class="clear-log-btn" id="clearLogBtn">🗑️ 清空紀錄</button>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- 底部分頁切換列 -->
+    <div class="tab-bar">
+        <button class="tab-btn active" data-tab="tab-edit">📝<br>站點與廣播</button>
+        <button class="tab-btn" data-tab="tab-arrival">🔔<br>到站按鈕</button>
+        <button class="tab-btn" data-tab="tab-log">🕒<br>結算時間</button>
     </div>
 
     <!-- 引入 Socket.io -->
     <script src="/socket.io/socket.io.js"></script>
     <script>
         const socket = io();
-        let stations = [];
-        let watchId = null;
-        let currentActiveIndex = 0;
 
+        let stations = [];
+        let announcements = []; // [{id, text}]
+        let watchId = null;
+
+        let targetIndex = 0;          // 目前前往的目標站索引
+        let stationPhase = 'next';    // 'next' | 'arriving' | 'finished'
+        let arrivalLog = [];          // 到站時間紀錄 [{station, time, timestamp}]
+
+        const ARRIVE_THRESHOLD = 500; // 公尺，小於等於此值視為「即將到站」
+
+        // ---- DOM 元素：分頁切換 ----
+        const tabBtns = document.querySelectorAll('.tab-btn');
+        const tabContents = document.querySelectorAll('.tab-content');
+        tabBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                tabBtns.forEach(b => b.classList.remove('active'));
+                tabContents.forEach(c => c.classList.remove('active'));
+                btn.classList.add('active');
+                document.getElementById(btn.dataset.tab).classList.add('active');
+            });
+        });
+
+        // ---- DOM 元素：分頁1 站點與廣播 ----
         const stationNickname = document.getElementById('stationNickname');
         const stationAddress = document.getElementById('stationAddress');
         const addBtn = document.getElementById('addBtn');
@@ -87,41 +251,141 @@
         const syncBtn = document.getElementById('syncBtn');
         const toggleGpsBtn = document.getElementById('toggleGpsBtn');
         const gpsStatus = document.getElementById('gpsStatus');
+        const distanceStatus = document.getElementById('distanceStatus');
 
-        // 初始化垂直拖拉排序 (SortableJS)
+        const announceInput = document.getElementById('announceInput');
+        const addAnnounceBtn = document.getElementById('addAnnounceBtn');
+        const announceList = document.getElementById('announceList');
+
+        // ---- DOM 元素：分頁2 到站按鈕 ----
+        const currentTargetBox = document.getElementById('currentTargetBox');
+        const currentTargetLabel = document.getElementById('currentTargetLabel');
+        const currentTargetName = document.getElementById('currentTargetName');
+        const currentTargetDist = document.getElementById('currentTargetDist');
+        const bigConfirmBtn = document.getElementById('bigConfirmBtn');
+        const prevStationBtn2 = document.getElementById('prevStationBtn2');
+        const skipStationBtn2 = document.getElementById('skipStationBtn2');
+        const toggleGpsBtn2 = document.getElementById('toggleGpsBtn2');
+
+        // ---- DOM 元素：分頁3 結算時間 ----
+        const arrivalLogBody = document.getElementById('arrivalLogBody');
+        const exportLogBtn = document.getElementById('exportLogBtn');
+        const clearLogBtn = document.getElementById('clearLogBtn');
+
+        // ---- DOM 元素：下車鈴橫幅 ----
+        const bellBanner = document.getElementById('bellBanner');
+        const clearBellBtn = document.getElementById('clearBellBtn');
+
+        // ---- 初始化：拿到伺服器目前的完整狀態 ----
+        socket.on('full-state', (data) => {
+            stations = data.stations || [];
+            targetIndex = data.targetIndex || 0;
+            stationPhase = data.stationPhase || 'next';
+            announcements = data.announcements || [];
+            arrivalLog = data.arrivalLog || [];
+            if (data.bellActive) showBellPanel();
+            renderStations();
+            renderAnnouncements();
+            renderArrivalLog();
+        });
+
+        // 另一支駕駛裝置確認到站時，這裡也同步紀錄
+        socket.on('arrival-log-update', (data) => {
+            arrivalLog = data.arrivalLog || [];
+            renderArrivalLog();
+        });
+
+        // 其他裝置（例如另一支駕駛手機）同步過來的更新，僅更新畫面不再重新廣播
+        socket.on('stations-update', (data) => {
+            stations = data.stations || [];
+            targetIndex = data.targetIndex || 0;
+            stationPhase = data.stationPhase || 'next';
+            renderStations();
+        });
+        socket.on('announcements-update', (data) => {
+            announcements = data.announcements || [];
+            renderAnnouncements();
+        });
+
+        // ---- 下車鈴 ----
+        socket.on('bell-ring', showBellPanel);
+        socket.on('bell-clear', hideBellPanel);
+
+        function showBellPanel() {
+            bellBanner.classList.add('active');
+            playBeep();
+        }
+        function hideBellPanel() {
+            bellBanner.classList.remove('active');
+        }
+        clearBellBtn.addEventListener('click', () => {
+            socket.emit('clear-bell');
+            hideBellPanel();
+        });
+
+        function playBeep() {
+            try {
+                const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.value = 880;
+                gain.gain.value = 0.2;
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.start();
+                setTimeout(() => { osc.stop(); ctx.close(); }, 400);
+            } catch (e) { /* 部分瀏覽器需要使用者互動才能播放音效，忽略錯誤即可 */ }
+        }
+
+        // ---- 拖拉排序（站點 / 宣導訊息） ----
         document.addEventListener('DOMContentLoaded', () => {
             Sortable.create(stationList, {
-                animation: 150,          // 拖拉放開時的滑順動畫 (毫秒)
-                handle: '.drag-handle',  // 只能拉左邊的 "☰" 圖示
-                direction: 'vertical',   // 限制垂直方向
-                lockAxis: 'y',           // 🌟 強制鎖死 Y 軸，絕對禁止左右移動！
-                forceFallback: true,     // 使用內建 Fallback 確保樣式與軸向鎖定有效
+                animation: 150,
+                handle: '.drag-handle',
+                direction: 'vertical',
+                lockAxis: 'y',
+                forceFallback: true,
                 onEnd: function (evt) {
                     const oldIndex = evt.oldIndex;
                     const newIndex = evt.newIndex;
-
                     if (oldIndex === newIndex) return;
 
-                    // 調整陣列
                     const movedItem = stations.splice(oldIndex, 1)[0];
                     stations.splice(newIndex, 0, movedItem);
 
-                    // 追蹤並修正目前所在站 (⭐) 的對應索引
-                    if (currentActiveIndex === oldIndex) {
-                        currentActiveIndex = newIndex;
-                    } else if (oldIndex < currentActiveIndex && newIndex >= currentActiveIndex) {
-                        currentActiveIndex--;
-                    } else if (oldIndex > currentActiveIndex && newIndex <= currentActiveIndex) {
-                        currentActiveIndex++;
+                    if (targetIndex === oldIndex) {
+                        targetIndex = newIndex;
+                    } else if (oldIndex < targetIndex && newIndex >= targetIndex) {
+                        targetIndex--;
+                    } else if (oldIndex > targetIndex && newIndex <= targetIndex) {
+                        targetIndex++;
                     }
 
                     renderStations();
-                    autoSync(); // 自動同步最新排序給跑馬燈
+                    autoSyncStations();
+                }
+            });
+
+            Sortable.create(announceList, {
+                animation: 150,
+                handle: '.drag-handle',
+                direction: 'vertical',
+                lockAxis: 'y',
+                forceFallback: true,
+                onEnd: function (evt) {
+                    const oldIndex = evt.oldIndex;
+                    const newIndex = evt.newIndex;
+                    if (oldIndex === newIndex) return;
+                    const moved = announcements.splice(oldIndex, 1)[0];
+                    announcements.splice(newIndex, 0, moved);
+                    renderAnnouncements();
+                    autoSyncAnnouncements();
                 }
             });
         });
 
-        // 新增站點
+        // ---- 新增站點 ----
         addBtn.addEventListener('click', async () => {
             const nickname = stationNickname.value.trim();
             const address = stationAddress.value.trim();
@@ -151,141 +415,332 @@
                 stationNickname.value = '';
                 stationAddress.value = '';
                 renderStations();
+                autoSyncStations();
             } catch (error) {
                 searchStatus.textContent = `❌ 地圖服務連線失敗。`;
             }
         });
 
-        // 渲染介面
+        // ---- 渲染站點清單 ----
         function renderStations() {
             stationList.innerHTML = '';
             stations.forEach((station, index) => {
                 const li = document.createElement('li');
-                if (index === currentActiveIndex) {
+                if (index === targetIndex) {
                     li.classList.add('active-station');
                 }
                 li.dataset.index = index;
 
                 const coordText = station.lat ? `座標: ${station.lat.toFixed(4)}, ${station.lon.toFixed(4)}` : '';
-                
+
                 li.innerHTML = `
                     <div style="display: flex; align-items: center; gap: 10px; width: 100%;">
                         <span class="drag-handle">☰</span>
                         <div style="flex: 1;">
-                            <strong>${index + 1}. ${station.name}</strong> ${index === currentActiveIndex ? '⭐(目前所在站)' : ''}
+                            <strong>${index + 1}. ${station.name}</strong> ${index === targetIndex ? '🎯(目標站)' : ''}
                             <div class="station-info">${station.address} | ${coordText}</div>
                         </div>
                         <div class="actions">
-                            <button onclick="removeStation(${index})">刪除</button>
+                            <button class="set-target-btn" onclick="setTargetStation(${index})">設為目標</button>
+                            <button class="delete-btn" onclick="removeStation(${index})">刪除</button>
                         </div>
                     </div>
                 `;
                 stationList.appendChild(li);
             });
+
+            updateDistanceStatusText();
+            updateArrivalPageUI();
         }
 
-        window.removeStation = function(index) {
-            stations.splice(index, 1);
-            if (currentActiveIndex >= stations.length && stations.length > 0) {
-                currentActiveIndex = stations.length - 1;
+        // ---- 分頁2「到站按鈕」畫面的即時更新 ----
+        function updateArrivalPageUI() {
+            const isArriving = (stationPhase === 'arriving' && targetIndex < stations.length);
+            const isFinished = (stations.length === 0 || targetIndex >= stations.length);
+
+            currentTargetBox.classList.toggle('arriving', isArriving);
+            bigConfirmBtn.classList.toggle('arriving', isArriving);
+
+            if (isFinished) {
+                currentTargetLabel.textContent = stations.length === 0 ? '尚未設定站點' : '路線結束';
+                currentTargetName.textContent = stations.length === 0 ? '請先到「站點與廣播」新增站點' : '🏁 已抵達最後一站';
+                currentTargetDist.textContent = '';
+                bigConfirmBtn.innerHTML = '🏁 已抵達最後一站';
+            } else {
+                currentTargetLabel.textContent = isArriving ? '即將到站' : '下一站';
+                currentTargetName.textContent = stations[targetIndex].name;
+                bigConfirmBtn.innerHTML = isArriving
+                    ? `✅ 確認到站：${stations[targetIndex].name}<br>（上下客完成，前往下一站）`
+                    : '✅ 確認到站<br>（上下客完成，前往下一站）';
             }
+        }
+
+        window.removeStation = function (index) {
+            stations.splice(index, 1);
+            if (targetIndex >= stations.length && stations.length > 0) {
+                targetIndex = stations.length - 1;
+            }
+            resetPhase();
             renderStations();
-            autoSync();
+            autoSyncStations();
         };
 
-        // GPS 開關控制
-        toggleGpsBtn.addEventListener('click', () => {
-            if (watchId === null) {
-                if (!navigator.geolocation) {
-                    alert('你的瀏覽器不支援地理定位功能！');
-                    return;
-                }
+        window.setTargetStation = function (index) {
+            targetIndex = index;
+            resetPhase();
+            renderStations();
+            autoSyncStations();
+        };
 
-                if (stations.length === 0) {
-                    alert('請先新增至少一個站點，才能開啟 GPS 自動導航！');
-                    return;
-                }
+        function resetPhase() {
+            stationPhase = stations.length === 0 ? 'finished' : 'next';
+        }
 
-                gpsStatus.textContent = '目前狀態：GPS 追蹤中（正在取得位置...）';
-                toggleGpsBtn.textContent = '關閉 GPS 自動追蹤';
-                toggleGpsBtn.style.backgroundColor = '#dc3545';
-
-                // 開始監聽手機/電腦 GPS
-                watchId = navigator.geolocation.watchPosition(
-                    position => {
-                        const driverLat = position.coords.latitude;
-                        const driverLon = position.coords.longitude;
-                        gpsStatus.textContent = `GPS 正常運作中 (緯度: ${driverLat.toFixed(4)}, 經度: ${driverLon.toFixed(4)})`;
-
-                        checkDistance(driverLat, driverLon);
-                    },
-                    error => {
-                        gpsStatus.textContent = `❌ GPS 取得失敗: ${error.message}`;
-                    },
-                    { enableHighAccuracy: true, maximumAge: 10000, timeout: 5000 }
-                );
-            } else {
-                navigator.geolocation.clearWatch(watchId);
-                watchId = null;
-                gpsStatus.textContent = '目前狀態：已關閉 GPS 追蹤';
-                toggleGpsBtn.textContent = '開啟 GPS 自動到站追蹤';
-                toggleGpsBtn.style.backgroundColor = '#17a2b8';
-            }
-        });
-
-        // 計算距離並自動切換站點
-        function checkDistance(lat1, lon1) {
-            if (stations.length === 0) return;
-
-            let closestIndex = 0;
-            let minDistance = Infinity;
-
-            stations.forEach((station, index) => {
-                const dist = getDistanceFromLatLonInMeters(lat1, lon1, station.lat, station.lon);
-                if (dist < minDistance) {
-                    minDistance = dist;
-                    closestIndex = index;
-                }
-            });
-
-            // 只要距離小於 500 公尺，且換了新站就自動切換
-            if (minDistance < 500 && currentActiveIndex !== closestIndex) {
-                currentActiveIndex = closestIndex;
+        // ---- 手動修正：回上一站 ----
+        function goToPrevStation() {
+            if (targetIndex > 0) {
+                targetIndex--;
+                resetPhase();
                 renderStations();
-                autoSync(); // 自動廣播給跑馬燈
-                console.log(`自動切換至最近站點: ${stations[closestIndex].name} (距離: ${Math.round(minDistance)}公尺)`);
+                autoSyncStations();
             }
+        }
+        prevStationBtn2.addEventListener('click', goToPrevStation);
+
+        // ---- 跳過此站：換下一站，但不記錄到站時間 ----
+        function skipStation() {
+            if (targetIndex >= stations.length) return;
+            if (!confirm(`確定要跳過「${stations[targetIndex].name}」嗎？此站不會記錄到站時間。`)) return;
+
+            targetIndex++;
+            stationPhase = (targetIndex >= stations.length) ? 'finished' : 'next';
+            renderStations();
+            autoSyncStations();
+        }
+        skipStationBtn2.addEventListener('click', skipStation);
+
+        // ---- 核心功能：司機確認已到站（上下客完成）----
+        function confirmArrival() {
+            if (targetIndex >= stations.length) {
+                alert('目前已經是最後一站，沒有下一站可以確認囉！');
+                return;
+            }
+
+            const arrivedStation = stations[targetIndex];
+            const now = new Date();
+            const timeStr = now.toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+
+            arrivalLog.push({ station: arrivedStation.name, time: timeStr, timestamp: now.getTime() });
+            renderArrivalLog();
+            socket.emit('driver-log-arrival', { station: arrivedStation.name, time: timeStr });
+
+            targetIndex++;
+            stationPhase = (targetIndex >= stations.length) ? 'finished' : 'next';
+            renderStations();
+            autoSyncStations();
+
+            // 上下客完成，順便清除下車鈴提示
+            socket.emit('clear-bell');
+            hideBellPanel();
+        }
+        bigConfirmBtn.addEventListener('click', confirmArrival);
+
+        // ---- GPS 開關控制（分頁1 與 分頁2 各有一顆按鈕，共用同一套邏輯）----
+        function startGps() {
+            if (!navigator.geolocation) {
+                alert('你的瀏覽器不支援地理定位功能！');
+                return;
+            }
+            if (stations.length === 0) {
+                alert('請先到「站點與廣播」新增至少一個站點，才能開啟 GPS 自動導航！');
+                return;
+            }
+
+            setGpsButtonsState(true, '正在取得位置...');
+
+            watchId = navigator.geolocation.watchPosition(
+                position => {
+                    const driverLat = position.coords.latitude;
+                    const driverLon = position.coords.longitude;
+                    gpsStatus.textContent = `GPS 正常運作中 (緯度: ${driverLat.toFixed(4)}, 經度: ${driverLon.toFixed(4)})`;
+                    checkDistance(driverLat, driverLon);
+                },
+                error => {
+                    gpsStatus.textContent = `❌ GPS 取得失敗: ${error.message}`;
+                },
+                { enableHighAccuracy: true, maximumAge: 10000, timeout: 5000 }
+            );
+        }
+
+        function stopGps() {
+            navigator.geolocation.clearWatch(watchId);
+            watchId = null;
+            gpsStatus.textContent = '目前狀態：已關閉 GPS 追蹤';
+            setGpsButtonsState(false);
+        }
+
+        function setGpsButtonsState(isTracking, note) {
+            const label = isTracking ? '關閉 GPS 自動追蹤' : '開啟 GPS 自動到站追蹤';
+            const color = isTracking ? '#dc3545' : '#17a2b8';
+            [toggleGpsBtn, toggleGpsBtn2].forEach(btn => {
+                btn.textContent = label;
+                btn.style.backgroundColor = color;
+            });
+            if (isTracking) {
+                gpsStatus.textContent = `目前狀態：GPS 追蹤中（${note || '運作中'}）`;
+            }
+        }
+
+        function toggleGps() {
+            if (watchId === null) {
+                startGps();
+            } else {
+                stopGps();
+            }
+        }
+        toggleGpsBtn.addEventListener('click', toggleGps);
+        toggleGpsBtn2.addEventListener('click', toggleGps);
+
+        // ---- 核心：距離判斷（只負責標示狀態，不自動換站）----
+        // next：距離 > 500m，顯示「下一站」
+        // arriving：距離 <= 500m，顯示「即將到站」，並讓「確認到站」按鈕變醒目
+        // 實際換到下一站，完全交由司機按下「確認到站」決定，避免 GPS 誤判提早換站
+        function checkDistance(lat, lon) {
+            if (stations.length === 0 || targetIndex >= stations.length) {
+                stationPhase = stations.length === 0 ? 'next' : 'finished';
+                updateDistanceStatusText();
+                updateArrivalPageUI();
+                return;
+            }
+
+            const target = stations[targetIndex];
+            const dist = getDistanceFromLatLonInMeters(lat, lon, target.lat, target.lon);
+
+            stationPhase = (dist <= ARRIVE_THRESHOLD) ? 'arriving' : 'next';
+
+            renderStations();
+            autoSyncStations();
+            updateDistanceStatusText(dist);
+        }
+
+        function updateDistanceStatusText(dist) {
+            if (stationPhase === 'finished' || stations.length === 0) {
+                distanceStatus.textContent = '狀態：已無下一站（路線結束）';
+                currentTargetDist.textContent = '';
+                return;
+            }
+            const target = stations[targetIndex];
+            const label = stationPhase === 'arriving' ? '即將到站' : '下一站';
+            const distText = (dist !== undefined) ? `，目前距離約 ${Math.round(dist)} 公尺` : '';
+            distanceStatus.textContent = `狀態：${label} - ${target.name}${distText}`;
+            currentTargetDist.textContent = (dist !== undefined) ? `距離約 ${Math.round(dist)} 公尺` : '';
         }
 
         // 經緯度算距離（公尺）
         function getDistanceFromLatLonInMeters(lat1, lon1, lat2, lon2) {
-            const R = 6371000; // 地球半徑 (公尺)
+            const R = 6371000;
             const dLat = deg2rad(lat2 - lat1);
             const dLon = deg2rad(lon2 - lon1);
-            const a = 
-                Math.sin(dLat/2) * Math.sin(dLat/2) +
-                Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) * 
-                Math.sin(dLon/2) * Math.sin(dLon/2);
-            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+            const a =
+                Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) *
+                Math.sin(dLon / 2) * Math.sin(dLon / 2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
             return R * c;
         }
+        function deg2rad(deg) { return deg * (Math.PI / 180); }
 
-        function deg2rad(deg) {
-            return deg * (Math.PI / 180);
+        // ---- 同步至伺服器 ----
+        function autoSyncStations() {
+            socket.emit('driver-update-stations', {
+                stations: stations,
+                targetIndex: targetIndex,
+                stationPhase: stationPhase
+            });
+        }
+        function autoSyncAnnouncements() {
+            socket.emit('driver-update-announcements', { announcements: announcements });
         }
 
-        // 自動同步至伺服器
-        function autoSync() {
-            socket.emit('update-stations', {
-                stations: stations,
-                currentIndex: currentActiveIndex
+        syncBtn.addEventListener('click', () => {
+            autoSyncStations();
+            autoSyncAnnouncements();
+            alert('站點清單、目前進度與宣導訊息已手動同步！');
+        });
+
+        // ---- 宣導訊息管理 ----
+        addAnnounceBtn.addEventListener('click', () => {
+            const text = announceInput.value.trim();
+            if (!text) return;
+            announcements.push({ id: 'a' + Date.now() + Math.random().toString(16).slice(2), text: text });
+            announceInput.value = '';
+            renderAnnouncements();
+            autoSyncAnnouncements();
+        });
+        announceInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') addAnnounceBtn.click();
+        });
+
+        function renderAnnouncements() {
+            announceList.innerHTML = '';
+            announcements.forEach((item, index) => {
+                const li = document.createElement('li');
+                li.innerHTML = `
+                    <span class="drag-handle">☰</span>
+                    <div class="announce-text">${index + 1}. ${item.text}</div>
+                    <div class="actions">
+                        <button class="delete-btn" onclick="removeAnnouncement('${item.id}')">刪除</button>
+                    </div>
+                `;
+                announceList.appendChild(li);
             });
         }
 
-        // 手動同步按鈕
-        syncBtn.addEventListener('click', () => {
-            autoSync();
-            alert('站點清單與目前進度已手動同步！');
+        window.removeAnnouncement = function (id) {
+            announcements = announcements.filter(a => a.id !== id);
+            renderAnnouncements();
+            autoSyncAnnouncements();
+        };
+
+        // ---- 到站時間紀錄（分頁3：結算時間）----
+        function renderArrivalLog() {
+            arrivalLogBody.innerHTML = '';
+            [...arrivalLog].reverse().forEach((entry, idx) => {
+                const tr = document.createElement('tr');
+                const displayNo = arrivalLog.length - idx;
+                tr.innerHTML = `<td>${displayNo}</td><td>${entry.station}</td><td>${entry.time}</td>`;
+                arrivalLogBody.appendChild(tr);
+            });
+        }
+
+        exportLogBtn.addEventListener('click', () => {
+            if (arrivalLog.length === 0) {
+                alert('目前沒有到站紀錄可以匯出。');
+                return;
+            }
+            let csv = '\uFEFF序號,站名,到站時間\n';
+            arrivalLog.forEach((entry, idx) => {
+                csv += `${idx + 1},${entry.station},${entry.time}\n`;
+            });
+
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            const dateStr = new Date().toISOString().slice(0, 10);
+            a.href = url;
+            a.download = `到站紀錄_${dateStr}.csv`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        });
+
+        clearLogBtn.addEventListener('click', () => {
+            if (arrivalLog.length === 0) return;
+            if (!confirm('確定要清空所有到站紀錄嗎？此動作無法復原（建議先匯出備份）。')) return;
+            arrivalLog = [];
+            renderArrivalLog();
+            socket.emit('driver-clear-log');
         });
     </script>
 </body>
