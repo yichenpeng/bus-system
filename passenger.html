@@ -14,7 +14,8 @@
             cursor: pointer; outline: none;
         }
         #bell-btn:active { transform: scale(0.95); background: #b30000; }
-        #msg { margin-top: 25px; font-size: 1.2rem; color: #00ff66; }
+        #bell-btn:disabled { opacity: 0.5; cursor: not-allowed; background: #666; border-color: #999; }
+        #msg { margin-top: 25px; font-size: 1.2rem; color: #00ff66; min-height: 1.5em; }
     </style>
 </head>
 <body>
@@ -28,13 +29,22 @@
     <script>
         const socket = io();
         const msgEl = document.getElementById('msg');
+        const bellBtn = document.getElementById('bell-btn');
 
         function ringBell() {
             socket.emit('press-bell');
-            msgEl.innerText = "✅ 已成功送出下車鈴！";
-            setTimeout(() => { msgEl.innerText = ""; }, 3000);
+            msgEl.innerText = "✅ 已成功送出下車鈴！司機已收到通知。";
+
+            // 短暫鎖定按鈕，避免重複連按洗版
+            bellBtn.disabled = true;
+            setTimeout(() => { bellBtn.disabled = false; }, 8000);
         }
+
+        // 司機端確認並清除提示時，這裡也同步提示乘客
+        socket.on('bell-clear', () => {
+            msgEl.innerText = "司機已確認，即將靠站。";
+            setTimeout(() => { msgEl.innerText = ""; }, 3000);
+        });
     </script>
 </body>
 </html>
-
