@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>公車 LED 跑馬燈 - 駕駛員控制台</title>
     <style>
+        .drag-handle { cursor: ns-resize; color: #888; font-size: 20px; padding: 0 5px; user-select: none; }
         body { font-family: Arial, sans-serif; margin: 20px; background-color: #f4f4f9; }
         .container { max-width: 600px; margin: auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
         h2 { color: #333; text-align: center; }
@@ -67,6 +68,37 @@
         const toggleGpsBtn = document.getElementById('toggleGpsBtn');
         const gpsStatus = document.getElementById('gpsStatus');
 
+        // 初始化垂直拖拉排序 (SortableJS)
+        document.addEventListener('DOMContentLoaded', () => {
+            Sortable.create(stationList, {
+                animation: 150,          // 拖拉放開時的滑順動畫 (毫秒)
+                handle: '.drag-handle',  // 只能拉左邊的 "☰" 圖示
+                direction: 'vertical',   // 嚴格限制只能垂直移動！
+                onEnd: function (evt) {
+                    const oldIndex = evt.oldIndex;
+                    const newIndex = evt.newIndex;
+
+                    if (oldIndex === newIndex) return;
+
+                    // 調整陣列
+                    const movedItem = stations.splice(oldIndex, 1)[0];
+                    stations.splice(newIndex, 0, movedItem);
+
+                    // 追蹤並修正目前所在站 (⭐) 的對應索引
+                    if (currentActiveIndex === oldIndex) {
+                        currentActiveIndex = newIndex;
+                    } else if (oldIndex < currentActiveIndex && newIndex >= currentActiveIndex) {
+                        currentActiveIndex--;
+                    } else if (oldIndex > currentActiveIndex && newIndex <= currentActiveIndex) {
+                        currentActiveIndex++;
+                    }
+
+                    renderStations();
+                    autoSync(); // 自動同步最新排序給跑馬燈
+                }
+            });
+        });
+
         // 新增站點
         addBtn.addEventListener('click', async () => {
             const nickname = stationNickname.value.trim();
@@ -102,44 +134,41 @@
             }
         });
 
-// 渲染介面
-function renderStations() {
-    stationList.innerHTML = '';
-    stations.forEach((station, index) => {
-        const li = document.createElement('li');
-        if (index === currentActiveIndex) {
-            li.classList.add('active-station');
-        }
-        li.dataset.index = index;
+        // 渲染介面
+        function renderStations() {
+            stationList.innerHTML = '';
+            stations.forEach((station, index) => {
+                const li = document.createElement('li');
+                if (index === currentActiveIndex) {
+                    li.classList.add('active-station');
+                }
+                li.dataset.index = index;
 
-        const coordText = station.lat ? `座標: ${station.lat.toFixed(4)}, ${station.lon.toFixed(4)}` : '';
-        
-        li.innerHTML = `
-            <div style="display: flex; align-items: center; gap: 10px; width: 100%;">
-                <span class="drag-handle">☰</span>
-                <div style="flex: 1;">
-                    <strong>${index + 1}. ${station.name}</strong> ${index === currentActiveIndex ? '⭐(目前所在站)' : ''}
-                    <div class="station-info">${station.address} | ${coordText}</div>
-                </div>
-                <div class="actions">
-                    <button onclick="removeStation(${index})">刪除</button>
-                </div>
-            </div>
-        `;
-        stationList.appendChild(li);
-    });
-}
-window.removeStation = function(index) {
-    stations.splice(index, 1);
-    if (currentActiveIndex >= stations.length && stations.length > 0) {
-        currentActiveIndex = stations.length - 1;
-    }
-    renderStations();
-    autoSync();
-};
+                const coordText = station.lat ? `座標: ${station.lat.toFixed(4)}, ${station.lon.toFixed(4)}` : '';
+                
+                li.innerHTML = `
+                    <div style="display: flex; align-items: center; gap: 10px; width: 100%;">
+                        <span class="drag-handle">☰</span>
+                        <div style="flex: 1;">
+                            <strong>${index + 1}. ${station.name}</strong> ${index === currentActiveIndex ? '⭐(目前所在站)' : ''}
+                            <div class="station-info">${station.address} | ${coordText}</div>
+                        </div>
+                        <div class="actions">
+                            <button onclick="removeStation(${index})">刪除</button>
+                        </div>
+                    </div>
+                `;
+                stationList.appendChild(li);
+            });
+        }
+
         window.removeStation = function(index) {
             stations.splice(index, 1);
+            if (currentActiveIndex >= stations.length && stations.length > 0) {
+                currentActiveIndex = stations.length - 1;
+            }
             renderStations();
+            autoSync();
         };
 
         // GPS 開關控制
@@ -182,29 +211,30 @@ window.removeStation = function(index) {
             }
         });
 
-        // 計算距離並自動切換站點（放寬限制以便室內測試）
-function checkDistance(lat1, lon1) {
-    if (stations.length === 0) return;
+        // 計算距離並自動切換站點
+        function checkDistance(lat1, lon1) {
+            if (stations.length === 0) return;
 
-    let closestIndex = 0;
-    let minDistance = Infinity;
+            let closestIndex = 0;
+            let minDistance = Infinity;
 
-    stations.forEach((station, index) => {
-        const dist = getDistanceFromLatLonInMeters(lat1, lon1, station.lat, station.lon);
-        if (dist < minDistance) {
-            minDistance = dist;
-            closestIndex = index;
+            stations.forEach((station, index) => {
+                const dist = getDistanceFromLatLonInMeters(lat1, lon1, station.lat, station.lon);
+                if (dist < minDistance) {
+                    minDistance = dist;
+                    closestIndex = index;
+                }
+            });
+
+            // 只要距離小於 500 公尺，且換了新站就自動切換
+            if (minDistance < 500 && currentActiveIndex !== closestIndex) {
+                currentActiveIndex = closestIndex;
+                renderStations();
+                autoSync(); // 自動廣播給跑馬燈
+                console.log(`自動切換至最近站點: ${stations[closestIndex].name} (距離: ${Math.round(minDistance)}公尺)`);
+            }
         }
-    });
 
-    // 只要距離小於 500 公尺（適合室內 Wi-Fi 定位誤差），且換了新站就自動切換
-    if (minDistance < 500 && currentActiveIndex !== closestIndex) {
-        currentActiveIndex = closestIndex;
-        renderStations();
-        autoSync(); // 自動廣播給跑馬燈
-        console.log(`自動切換至最近站點: ${stations[closestIndex].name} (距離: ${Math.round(minDistance)}公尺)`);
-    }
-}
         // 經緯度算距離（公尺）
         function getDistanceFromLatLonInMeters(lat1, lon1, lat2, lon2) {
             const R = 6371000; // 地球半徑 (公尺)
