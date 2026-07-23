@@ -169,29 +169,29 @@
             }
         });
 
-        // 計算距離並自動切換站點（Haversine 公式）
-        function checkDistance(lat1, lon1) {
-            if (stations.length === 0) return;
+        // 計算距離並自動切換站點（放寬限制以便室內測試）
+function checkDistance(lat1, lon1) {
+    if (stations.length === 0) return;
 
-            let closestIndex = currentActiveIndex;
-            let minDistance = Infinity;
+    let closestIndex = 0;
+    let minDistance = Infinity;
 
-            stations.forEach((station, index) => {
-                const dist = getDistanceFromLatLonInMeters(lat1, lon1, station.lat, station.lon);
-                if (dist < minDistance) {
-                    minDistance = dist;
-                    closestIndex = index;
-                }
-            });
-
-            // 如果距離某個站點小於 100 公尺，自動判定切換到該站
-            if (minDistance < 100 && currentActiveIndex !== closestIndex) {
-                currentActiveIndex = closestIndex;
-                renderStations();
-                autoSync(); // 自動廣播給跑馬燈
-            }
+    stations.forEach((station, index) => {
+        const dist = getDistanceFromLatLonInMeters(lat1, lon1, station.lat, station.lon);
+        if (dist < minDistance) {
+            minDistance = dist;
+            closestIndex = index;
         }
+    });
 
+    // 只要距離小於 500 公尺（適合室內 Wi-Fi 定位誤差），且換了新站就自動切換
+    if (minDistance < 500 && currentActiveIndex !== closestIndex) {
+        currentActiveIndex = closestIndex;
+        renderStations();
+        autoSync(); // 自動廣播給跑馬燈
+        console.log(`自動切換至最近站點: ${stations[closestIndex].name} (距離: ${Math.round(minDistance)}公尺)`);
+    }
+}
         // 經緯度算距離（公尺）
         function getDistanceFromLatLonInMeters(lat1, lon1, lat2, lon2) {
             const R = 6371000; // 地球半徑 (公尺)
