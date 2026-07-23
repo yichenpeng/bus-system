@@ -249,7 +249,7 @@
                 displayTextEl.style.animation = 'none';
                 displayTextEl.classList.add('forced');
                 displayTextEl.style.position = 'relative';
-                displayTextEl.textContent = `🚏 即將到站：${stations[targetIndex].name}，請準備下車`;
+                displayTextEl.textContent = `即將到站：${stations[targetIndex].name}`;
             } else if (!shouldForce && isForced) {
                 isForced = false;
                 displayTextEl.classList.remove('forced');
