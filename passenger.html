@@ -2,31 +2,98 @@
 <html lang="zh-Hant">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>乘客下車鈴</title>
     <style>
-        body { background: #1a1a1a; color: white; text-align: center; padding-top: 60px; font-family: sans-serif; }
+        html, body {
+            margin: 0; padding: 0; width: 100%; height: 100%;
+            background: #1a1a1a; overflow: hidden;
+        }
+
+        /*
+          跟顯示幕(display.html)採用同一套做法：把整個畫面設計在一個固定的
+          750x1334（常見手機邏輯解析度，直式）虛擬舞台裡，再用 JS 依實際裝置
+          螢幕大小計算等比縮放倍率，確保不同廠牌、不同尺寸的手機看起來比例一致。
+        */
+        #stage {
+            position: fixed;
+            top: 0; left: 0;
+            width: 750px;
+            height: 1334px;
+            transform-origin: top left;
+            background: #1a1a1a;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            color: #fff;
+            box-sizing: border-box;
+        }
+
+        .frame {
+            width: 100%; height: 100%;
+            box-sizing: border-box;
+            padding: 60px 40px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+        }
+
+        h1 { font-size: 48px; margin: 20px 0 10px 0; }
+        .subtitle { font-size: 28px; color: #ccc; margin-bottom: 60px; }
+
+        /* 下車鈴按鈕：固定比例的圓形，跟舞台一起縮放，各裝置視覺大小一致 */
         #bell-btn {
-            width: 260px; height: 260px; border-radius: 50%;
+            width: 420px; height: 420px; border-radius: 50%;
             background: linear-gradient(145deg, #ff4d4d, #cc0000);
-            color: white; font-size: 2.2rem; font-weight: bold;
-            border: 8px solid #ff9999; box-shadow: 0 10px 30px rgba(255,0,0,0.5);
+            color: white; font-size: 40px; font-weight: bold; line-height: 1.3;
+            border: 14px solid #ff9999; box-shadow: 0 16px 50px rgba(255,0,0,0.5);
             cursor: pointer; outline: none;
         }
-        #bell-btn:active { transform: scale(0.95); background: #b30000; }
+        #bell-btn:active { transform: scale(0.96); background: #b30000; }
         #bell-btn:disabled { opacity: 0.5; cursor: not-allowed; background: #666; border-color: #999; }
-        #msg { margin-top: 25px; font-size: 1.2rem; color: #00ff66; min-height: 1.5em; }
+
+        #msg { margin-top: 45px; font-size: 30px; color: #00ff66; min-height: 2.2em; }
+
+        .footer-note { margin-top: auto; font-size: 20px; color: #555; }
     </style>
 </head>
 <body>
-    <h1>乘客互動專區</h1>
-    <p>準備下車了嗎？請按下方的按鈕</p>
-    <br>
-    <button id="bell-btn" onclick="ringBell()">我要下車<br>🔔 按鈴</button>
-    <div id="msg"></div>
+
+    <div id="stage">
+        <div class="frame">
+            <h1>乘客互動專區</h1>
+            <div class="subtitle">準備下車了嗎？請按下方的按鈕</div>
+
+            <button id="bell-btn" onclick="ringBell()">我要下車<br>🔔 按鈴</button>
+            <div id="msg"></div>
+
+            <div class="footer-note">公車 LED 跑馬燈系統</div>
+        </div>
+    </div>
 
     <script src="/socket.io/socket.io.js"></script>
     <script>
+        // ---------- 固定舞台等比縮放：確保各種裝置畫面比例一致 ----------
+        const STAGE_WIDTH = 750;
+        const STAGE_HEIGHT = 1334;
+        const stage = document.getElementById('stage');
+
+        function fitStage() {
+            const scale = Math.min(
+                window.innerWidth / STAGE_WIDTH,
+                window.innerHeight / STAGE_HEIGHT
+            );
+            const offsetX = (window.innerWidth - STAGE_WIDTH * scale) / 2;
+            const offsetY = (window.innerHeight - STAGE_HEIGHT * scale) / 2;
+
+            stage.style.transform = `scale(${scale})`;
+            stage.style.left = offsetX + 'px';
+            stage.style.top = offsetY + 'px';
+        }
+        window.addEventListener('resize', fitStage);
+        window.addEventListener('orientationchange', fitStage);
+        fitStage();
+
+        // ---------- 下車鈴邏輯 ----------
         const socket = io();
         const msgEl = document.getElementById('msg');
         const bellBtn = document.getElementById('bell-btn');
