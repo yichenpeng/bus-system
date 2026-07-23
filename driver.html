@@ -1,124 +1,164 @@
 <!DOCTYPE html>
-<html lang="zh-Hant">
+<html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <title>司機控制台</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>公車 LED 跑馬燈 - 駕駛員控制台</title>
     <style>
-        body { background: #222; color: white; font-family: sans-serif; padding: 20px; max-width: 500px; margin: auto; }
-        input, select, button { width: 100%; padding: 12px; margin: 10px 0; font-size: 1.1rem; box-sizing: border-box; }
-        button { background: #00b386; color: white; border: none; cursor: pointer; font-weight: bold; }
-        button:hover { background: #008860; }
-        ul { padding-left: 20px; }
+        body { font-family: Arial, sans-serif; margin: 20px; background-color: #f4f4f9; }
+        .container { max-width: 600px; margin: auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+        h2 { color: #333; text-align: center; }
+        .input-group { display: flex; flex-direction: column; gap: 10px; margin-bottom: 15px; background: #fafafa; padding: 15px; border-radius: 6px; border: 1px solid #eee; }
+        .input-row { display: flex; gap: 10px; }
+        input { flex: 1; padding: 10px; font-size: 16px; border: 1px solid #ccc; border-radius: 4px; }
+        button { padding: 10px 15px; font-size: 16px; background-color: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        button:hover { background-color: #218838; }
+        ul { list-style: none; padding: 0; }
+        li { background: #fff; border: 1px solid #ddd; margin-bottom: 8px; padding: 10px; display: flex; justify-content: space-between; align-items: center; border-radius: 4px; cursor: grab; }
+        li.dragging { opacity: 0.4; }
+        .station-info { font-size: 14px; color: #666; margin-top: 4px; }
+        .actions button { background-color: #dc3545; margin-left: 5px; padding: 5px 10px; font-size: 14px; }
+        .actions button:hover { background-color: #c82333; }
+        .search-status { font-size: 12px; color: #007bff; margin-top: 5px; }
     </style>
 </head>
 <body>
-    <h2>駕駛員控制台</h2>
-    
-    <label>選擇下一站：</label>
-    <select id="stop-select">
-        <option value="台北車站">台北車站</option>
-        <option value="台大醫院">台大醫院</option>
-        <option value="中正紀念堂">中正紀念堂</option>
-        <option value="古亭站">古亭站</option>
-    </select>
-    <button onclick="updateStop()">更新下一站</button>
 
-    <hr style="margin: 30px 0;">
+    <div class="container">
+        <h2>🚌 駕駛員控制台</h2>
+        
+        <div class="input-group">
+            <div class="input-row">
+                <input type="text" id="stationNickname" placeholder="跑馬燈顯示名稱（例如：總公司）">
+                <input type="text" id="stationAddress" placeholder="真實地址/地標（例如：台北市信義路五段7號）">
+            </div>
+            <button id="addBtn">新增站點</button>
+            <div id="searchStatus" class="search-status"></div>
+        </div>
 
-    <!-- 動態新增站點介面 -->
-    <h3>新增自訂站點</h3>
-    <div class="station-input-group">
-      <input type="text" id="stationName" placeholder="請輸入站名暱稱 (例如: 總統府站)">
-      <input type="text" id="stationAddress" placeholder="請輸入真實地址 (例如: 台北市重慶南路一段122號)">
-      <button id="addStationBtn" type="button">新增站點</button>
+        <h3>站點清單（可拖曳排序）</h3>
+        <ul id="stationList"></ul>
+
+        <button id="syncBtn" style="width: 100%; background-color: #007bff; margin-top: 15px;">同步更新至跑馬燈</button>
     </div>
-    <ul id="stationList"></ul>
 
-    <hr style="margin: 30px 0;">
-
-    <label>更改跑馬燈宣導文字：</label>
-    <input type="text" id="marquee-input" value="防疫期間，請留意自身健康狀況。">
-    <button onclick="updateMarquee()">更新跑馬燈內容</button>
-
+    <!-- 引入 Socket.io 用於即時通訊 -->
     <script src="/socket.io/socket.io.js"></script>
     <script>
         const socket = io();
-
-        // 儲存動態新增站點的陣列
         let stations = [];
 
-        function updateStop() {
-            const stop = document.getElementById('stop-select').value;
-            socket.emit('update-bus-info', { nextStop: stop });
-            alert('已更新下一站為：' + stop);
-        }
+        const stationNickname = document.getElementById('stationNickname');
+        const stationAddress = document.getElementById('stationAddress');
+        const addBtn = document.getElementById('addBtn');
+        const stationList = document.getElementById('stationList');
+        const searchStatus = document.getElementById('searchStatus');
+        const syncBtn = document.getElementById('syncBtn');
 
-        function updateMarquee() {
-            const text = document.getElementById('marquee-input').value;
-            socket.emit('update-bus-info', { marquee: text });
-            alert('已更新跑馬燈宣導！');
-        }
+        // 點擊新增站點按鈕
+        addBtn.addEventListener('click', async () => {
+            const nickname = stationNickname.value.trim();
+            const address = stationAddress.value.trim();
 
-        // 更新畫面上的站點列表與下拉選單
-        function updateStationUI() {
-            const listEl = document.getElementById('stationList');
-            const selectEl = document.getElementById('stop-select');
-            
-            listEl.innerHTML = '';
-            selectEl.innerHTML = '';
+            if (!nickname || !address) {
+                alert('請同時填寫「跑馬燈顯示名稱」與「真實地址」！');
+                return;
+            }
 
-            stations.forEach((station) => {
-                // 更新清單顯示
+            searchStatus.textContent = `正在查詢 "${address}" 的地理位置...`;
+
+            try {
+                // 使用 OpenStreetMap Nominatim API 根據真實地址查詢經緯度
+                const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}`);
+                const data = await response.json();
+
+                if (!data || data.length === 0) {
+                    searchStatus.textContent = `❌ 查無此地址的精確地理座標，請確認地址是否正確或重新輸入！`;
+                    alert('查無此地址的經緯度，無法加入站點！');
+                    return; // 終止執行，不加入陣列
+                }
+
+                const lat = parseFloat(data[0].lat);
+                const lon = parseFloat(data[0].lon);
+                searchStatus.textContent = `✅ 成功找到地理位置！`;
+
+                // 將站點加入陣列
+                stations.push({
+                    name: nickname,
+                    address: address,
+                    lat: lat,
+                    lon: lon
+                });
+
+                stationNickname.value = '';
+                stationAddress.value = '';
+                renderStations();
+
+            } catch (error) {
+                console.error('地理編碼查詢失敗:', error);
+                searchStatus.textContent = `❌ 地圖服務連線失敗，請稍後再試。`;
+                alert('地圖服務連線失敗，無法加入站點！');
+            }
+        });
+
+        // 渲染站點介面
+        function renderStations() {
+            stationList.innerHTML = '';
+            stations.forEach((station, index) => {
                 const li = document.createElement('li');
-                li.textContent = `${station.name} (${station.address})`;
-                listEl.appendChild(li);
+                li.draggable = true;
+                li.dataset.index = index;
 
-                // 同步更新到「選擇下一站」的下拉選單中
-                const option = document.createElement('option');
-                option.value = station.name;
-                option.textContent = station.name;
-                selectEl.appendChild(option);
+                const coordText = station.lat ? `經緯度: ${station.lat.toFixed(4)}, ${station.lon.toFixed(4)}` : '無座標';
+                
+                li.innerHTML = `
+                    <div>
+                        <strong>${index + 1}. 顯示名稱：${station.name}</strong>
+                        <div class="station-info">真實地址：${station.address} | ${coordText}</div>
+                    </div>
+                    <div class="actions">
+                        <button onclick="removeStation(${index})">刪除</button>
+                    </div>
+                `;
+
+                // 拖曳排序事件
+                li.addEventListener('dragstart', () => li.classList.add('dragging'));
+                li.addEventListener('dragend', () => li.classList.remove('dragging'));
+
+                stationList.appendChild(li);
             });
         }
 
-        // 新增站點按鈕事件
-        document.getElementById('addStationBtn').addEventListener('click', async () => {
-          const name = document.getElementById('stationName').value;
-          const address = document.getElementById('stationAddress').value;
-          
-          if (!name || !address) {
-            alert('請輸入站名與地址！');
-            return;
-          }
+        // 刪除站點
+        window.removeStation = function(index) {
+            stations.splice(index, 1);
+            renderStations();
+        };
 
-          try {
-            // 透過免費的 Nominatim API 將地址轉為經緯度
-            const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}`);
-            const data = await response.json();
+        // 拖曳排序核心邏輯
+        stationList.addEventListener('dragover', e => {
+            e.preventDefault();
+            const draggingItem = document.querySelector('.dragging');
+            const siblings = [...stationList.querySelectorAll('li:not(.dragging)')];
             
-            if (data && data.length > 0) {
-              const lat = parseFloat(data[0].lat);
-              const lon = parseFloat(data[0].lon);
-              
-              // 將資料推入站點陣列
-              stations.push({ name: name, address: address, lat: lat, lon: lon });
-              
-              alert(`成功新增站點：${name} (${lat.toFixed(4)}, ${lon.toFixed(4)})`);
-              updateStationUI(); // 更新畫面的站點列表與下拉選單
+            const nextSibling = siblings.find(sibling => {
+                const box = sibling.getBoundingClientRect();
+                return e.clientY <= box.top + box.height / 2;
+            });
 
-              // 清空輸入框
-              document.getElementById('stationName').value = '';
-              document.getElementById('stationAddress').value = '';
-              
-              // 同步透過 Socket 傳給伺服器/其他畫面
-              socket.emit('update-stations', stations);
-            } else {
-              alert('找不到該地址，請檢查地址是否正確！');
-            }
-          } catch (error) {
-            console.error('地址轉換失敗', error);
-            alert('連線地圖伺服器失敗');
-          }
+            stationList.insertBefore(draggingItem, nextSibling);
+        });
+
+        stationList.addEventListener('drop', () => {
+            const items = [...stationList.querySelectorAll('li')];
+            stations = items.map(item => stations[item.dataset.index]);
+            renderStations();
+        });
+
+        // 同步至後端與跑馬燈
+        syncBtn.addEventListener('click', () => {
+            socket.emit('update-stations', stations);
+            alert('站點清單已成功同步！');
         });
     </script>
 </body>
