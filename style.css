@@ -33,4 +33,5 @@ body {
     from { opacity: 1; }
     to { opacity: 0.2; }
 }
-
+li { background: #fff; border: 1px solid #ddd; margin-bottom: 8px; padding: 10px; display: flex; justify-content: space-between; align-items: center; border-radius: 4px; cursor: grab; }
+li:active { cursor: grabbing; }
